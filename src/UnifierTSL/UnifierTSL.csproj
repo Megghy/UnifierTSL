@@ -55,10 +55,6 @@
 		<ProjectReference Include="..\UnifierTSL.ConsoleClient\UnifierTSL.ConsoleClient.csproj" />
 	</ItemGroup>
 
-	<ItemGroup>
-		<InternalsVisibleTo Include="BossFramework.Tests" />
-	</ItemGroup>
-
 	<!-- Include README in the package -->
 	<ItemGroup>
 		<None Include="..\..\docs\NUGET.md" Pack="true" PackagePath="\" />
