@@ -19,11 +19,27 @@ public abstract partial class ServerSurfaceConsole
     private ConsoleColor cachedForegroundColor = System.Console.ForegroundColor;
     private Encoding cachedInputEncoding = System.Console.InputEncoding;
     private Encoding cachedOutputEncoding = System.Console.OutputEncoding;
-    private int cachedWindowHeight = System.Console.WindowHeight;
-    private int cachedWindowLeft = System.Console.WindowLeft;
-    private int cachedWindowTop = System.Console.WindowTop;
-    private int cachedWindowWidth = System.Console.WindowWidth;
+    private int cachedWindowHeight = ReadConsoleMetric(static () => System.Console.WindowHeight, 25);
+    private int cachedWindowLeft = ReadConsoleMetric(static () => System.Console.WindowLeft, 0);
+    private int cachedWindowTop = ReadConsoleMetric(static () => System.Console.WindowTop, 0);
+    private int cachedWindowWidth = ReadConsoleMetric(static () => System.Console.WindowWidth, 80);
     private string cachedTitle = string.Empty;
+
+    private static int ReadConsoleMetric(Func<int> reader, int fallback)
+    {
+        try
+        {
+            return reader();
+        }
+        catch (IOException)
+        {
+            return fallback;
+        }
+        catch (InvalidOperationException)
+        {
+            return fallback;
+        }
+    }
 
     public virtual bool HasActiveSurfaceActivity => StatusRuntime.HasActiveActivity;
 

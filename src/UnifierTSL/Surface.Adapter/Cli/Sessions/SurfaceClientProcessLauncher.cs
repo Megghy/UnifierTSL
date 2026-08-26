@@ -17,16 +17,8 @@ namespace UnifierTSL.Surface.Adapter.Cli.Sessions {
             ThrowIfDisposed();
             StopClient(killIfRunning: true);
 
-            var clientExePath = Path.Combine("app", $"UnifierTSL.ConsoleClient{FileSystemHelper.GetExecutableExtension()}");
-            var startInfo = new ProcessStartInfo {
-                FileName = clientExePath,
-                Arguments = pipeName,
-                UseShellExecute = true,
-                CreateNoWindow = false
-            };
-
             var process = new Process {
-                StartInfo = startInfo,
+                StartInfo = CreateStartInfo(),
                 EnableRaisingEvents = true
             };
             process.Start();
@@ -34,6 +26,29 @@ namespace UnifierTSL.Surface.Adapter.Cli.Sessions {
             lock (stateLock) {
                 clientProcess = process;
             }
+        }
+
+        private ProcessStartInfo CreateStartInfo() {
+            var clientExePath = Path.Combine("app", $"UnifierTSL.ConsoleClient{FileSystemHelper.GetExecutableExtension()}");
+            if (!OperatingSystem.IsLinux()) {
+                return new ProcessStartInfo {
+                    FileName = clientExePath,
+                    Arguments = pipeName,
+                    UseShellExecute = true,
+                    CreateNoWindow = false
+                };
+            }
+
+            var startInfo = new ProcessStartInfo {
+                FileName = "/usr/bin/screen",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            startInfo.ArgumentList.Add("-D");
+            startInfo.ArgumentList.Add("-m");
+            startInfo.ArgumentList.Add(clientExePath);
+            startInfo.ArgumentList.Add(pipeName);
+            return startInfo;
         }
 
         public void StopClient(bool killIfRunning) {

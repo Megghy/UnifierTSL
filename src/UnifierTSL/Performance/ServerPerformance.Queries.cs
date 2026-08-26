@@ -26,8 +26,8 @@ namespace UnifierTSL.Performance
                 public int Gen2Collections;
                 public uint ReceivedBytesCount;
                 public uint SentBytesCount;
-                public ushort ReceivedPacketCount;
-                public ushort SentPacketCount;
+                public uint ReceivedPacketCount;
+                public uint SentPacketCount;
             }
 
             public static PerformanceSnapshot GetSnapshot(ServerContext server, TimeSpan window) {

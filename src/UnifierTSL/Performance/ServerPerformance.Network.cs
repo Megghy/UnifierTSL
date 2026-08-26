@@ -17,6 +17,10 @@ namespace UnifierTSL.Performance
             public static void SentBytes(uint amount) {
                 Interlocked.Add(ref sentBytesCount, amount);
             }
+            public static void Sent(uint amount) {
+                Interlocked.Add(ref sentBytesCount, amount);
+                Interlocked.Increment(ref sentPacketsCount);
+            }
             public static void ReceivedPackets(uint amount) {
                 Interlocked.Add(ref receivedPacketsCount, amount);
             }

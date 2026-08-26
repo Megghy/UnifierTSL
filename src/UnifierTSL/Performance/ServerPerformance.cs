@@ -14,8 +14,8 @@ namespace UnifierTSL.Performance
             public long budgetedSleepTicks;
             public uint ReceivedBytesCount;
             public uint SentBytesCount;
-            public ushort ReceivedPacketCount;
-            public ushort SentPacketCount;
+            public uint ReceivedPacketCount;
+            public uint SentPacketCount;
             public void Finish(ServerContext server) {
                 var perf = server.Performance;
                 perf.TotalReceivedBytesCount += ReceivedBytesCount;

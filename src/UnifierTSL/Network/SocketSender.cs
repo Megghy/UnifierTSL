@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Concurrent;
 using Terraria.Localization;
 using Terraria.Net.Sockets;
 using TrProtocol.NetPackets;
@@ -8,6 +9,8 @@ namespace UnifierTSL.Network
 {
     public abstract class SocketSender(int clientId = -1) : PacketSender
     {
+        private static readonly SocketSendCallback EmptySendCallback = static _ => { };
+
         public ulong ReceivedBytesCount { get; internal set; }
         public ulong SentBytesCount { get; internal set; }
         public uint ReceivedPacketCount { get; internal set; }
@@ -29,8 +32,7 @@ namespace UnifierTSL.Network
                 perf.CurrentFrameData.SentBytesCount += size;
                 perf.CurrentFrameData.SentPacketCount += 1;
             }
-            ServerPerformance.Network.SentBytes(size);
-            ServerPerformance.Network.SentPacket();
+            ServerPerformance.Network.Sent(size);
             SentData();
         }
 
@@ -39,7 +41,7 @@ namespace UnifierTSL.Network
             if (!(sk?.IsConnected() ?? false)) {
                 return;
             }
-            sk.AsyncSend(data, index, size, _ => { }, null);
+            sk.AsyncSend(data, index, size, EmptySendCallback, null);
             CountSentBytes((uint)size);
         }
 
@@ -73,22 +75,54 @@ namespace UnifierTSL.Network
             CountSentBytes((uint)size);
         }
 
-        private record FreeBufferState(byte[] Buffer, SocketSendCallback Callback, object? State);
+        private sealed class FreeBufferState {
+            public byte[] Buffer = null!;
+            public SocketSendCallback Callback = null!;
+            public object? State;
+            private int _recycled;
+            public void Reset(byte[] buffer, SocketSendCallback callback, object? state) {
+                Buffer = buffer;
+                Callback = callback;
+                State = state;
+                _recycled = 0;
+            }
+            public void Recycle() {
+                if (Interlocked.Exchange(ref _recycled, 1) != 0)
+                    return;
+                Buffer = null!;
+                Callback = null!;
+                State = null;
+                FreeBufferStates.Add(this);
+            }
+        }
+        private static readonly ConcurrentBag<FreeBufferState> FreeBufferStates = new();
+
         protected sealed override void SendDataAndFreeBuffer(byte[] buffer, int index, int size, SocketSendCallback callback, object? state = null) {
             ISocket sk = Socket;
             if (!(sk?.IsConnected() ?? false)) {
                 ArrayPool<byte>.Shared.Return(buffer);
                 return;
             }
+            FreeBufferState? callbackState = null;
             try {
+                callbackState = FreeBufferStates.TryTake(out var pooled)
+                    ? pooled
+                    : new FreeBufferState();
+                callbackState.Reset(buffer, callback, state);
                 sk.AsyncSendNoCopy(buffer, index, size, static boxedState => {
                     FreeBufferState state = (FreeBufferState)boxedState;
-                    ArrayPool<byte>.Shared.Return(state.Buffer);
-                    state.Callback(state.State);
-                }, new FreeBufferState(buffer, callback, state));
+                    try {
+                        ArrayPool<byte>.Shared.Return(state.Buffer);
+                        state.Callback(state.State);
+                    }
+                    finally {
+                        state.Recycle();
+                    }
+                }, callbackState);
             }
             catch {
                 ArrayPool<byte>.Shared.Return(buffer);
+                callbackState?.Recycle();
             }
             CountSentBytes((uint)size);
         }

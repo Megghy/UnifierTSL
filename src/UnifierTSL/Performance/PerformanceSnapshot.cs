@@ -19,8 +19,8 @@ namespace UnifierTSL.Performance
         int Gen2Collections,
         uint ReceivedBytesCount,
         uint SentBytesCount,
-        ushort ReceivedPacketCount,
-        ushort SentPacketCount)
+        uint ReceivedPacketCount,
+        uint SentPacketCount)
     {
         public static PerformanceSnapshot Empty(TimeSpan requestedWindow)
             => new(

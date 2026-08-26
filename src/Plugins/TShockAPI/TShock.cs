@@ -101,7 +101,8 @@ namespace TShockAPI
         /// <summary>
         /// only used for creating sample like item, projectile and npc (SetDefaults() requires it).
         /// </summary>
-        internal static SampleServer ServerSample = new();
+        private static readonly Lazy<SampleServer> serverSample = new(CreateServerSample);
+        internal static SampleServer ServerSample => serverSample.Value;
         internal static int SetupToken = -1;
         /// <summary>Geo - Static reference to the GeoIP system which determines the location of an IP address.</summary>
         public static GeoIPCountry Geo;
@@ -113,8 +114,11 @@ namespace TShockAPI
         /// <summary>RestManager - Static reference to the Rest API manager.</summary>
         public static RestManager RestManager;
         internal static ModuleManager ModuleManager = new();
-        static TShock() {
-            ServerSample.Main.player[Main.myPlayer] = new Player();
+        private static SampleServer CreateServerSample()
+        {
+            var server = new SampleServer();
+            server.Main.player[Main.myPlayer] = new Player();
+            return server;
         }
         #endregion
 

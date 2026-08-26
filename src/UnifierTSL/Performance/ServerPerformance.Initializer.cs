@@ -3,6 +3,8 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using MonoMod.Cil;
 using System.Diagnostics;
+using System.Reflection;
+using OTAPI;
 using Terraria;
 using Terraria.Net;
 using Terraria.Net.Sockets;
@@ -22,12 +24,16 @@ namespace UnifierTSL.Performance
 
                 On.Terraria.Testing.DetailedFPSSystemContext.StartNextFrame += Detour_DetailedFPSSystemContext_StartNextFrame;
                 IL.OTAPI.HooksSystemContext.NetMessageSystemContext.InvokeSendBytes += ILDetour_NetMessageSystemContext_InvokeSendBytes;
+                IL.OTAPI.HooksSystemContext.NetMessageSystemContext.InvokeSendBytes += ILDetour_InvokeSendBytesNullPath;
+                IL.OTAPI.HooksSystemContext.NetMessageSystemContext.InvokeCreatePacketWriter += ILDetour_InvokeCreatePacketWriter;
+                IL.Terraria.NetMessage.OnPacketWrite += ILDetour_NetMessage_OnPacketWrite;
 
                 IL.Terraria.Net.NetManager.mfwh_Broadcast_NetPacket_BroadcastCondition_int += ILDetour_NetManager_SendData;
                 IL.Terraria.Net.NetManager.mfwh_Broadcast_NetPacket_int += ILDetour_NetManager_SendData;
                 IL.Terraria.Net.NetManager.mfwh_SendToClient += ILDetour_NetManager_SendData;
             }
-            const System.Reflection.BindingFlags BF_NonPub_Static = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+            const BindingFlags BF_NonPub_Static = BindingFlags.NonPublic | BindingFlags.Static;
+            const BindingFlags BF_NonPub_Instance = BindingFlags.NonPublic | BindingFlags.Instance;
             private static void ILDetour_Main_DedServ(ILContext il) {
                 var serverStart = il.Instrs.Single(
                     inst => inst is {
@@ -50,94 +56,65 @@ namespace UnifierTSL.Performance
                 var DetailedFPS = server.DetailedFPS;
                 var data = server.Performance;
 
-                // loop timer
                 var frameTimer = Stopwatch.StartNew();
-
+                var gameTime = new GameTime();
                 const double idealFrameTimeMs = 1000 / 60d;
-
-                // Timing drift piles up over time because Sleep() isn't exact
-                // and frame cost isn't perfectly stable either.
-                // We keep this around so later frames can nudge things back into place.
-                double accumulatedTimingDriftMs = 0.0;
+                var nextFrameAtMs = idealFrameTimeMs;
 
                 // Dedicated server doesn't need menus or any of that
                 Main.gameMenu = false;
 
-                // Main server loop, runs until we're told to disconnect
-                while (!Netplay.Disconnect) {
+                while (!Netplay.Disconnect)
+                {
+                    var nowMs = frameTimer.Elapsed.TotalMilliseconds;
+                    if (nowMs < nextFrameAtMs)
+                    {
+                        var sleepMs = (int)Math.Floor(nextFrameAtMs - nowMs) - 1;
+                        if (sleepMs > 1)
+                            Thread.Sleep(sleepMs);
+                        else
+                            Thread.Sleep(0);
+                        continue;
+                    }
 
-                    // Time spent since the last frame started
-                    double timeSinceLastFrameStartMs = frameTimer.Elapsed.TotalMilliseconds;
+                    var scheduledFrameAtMs = nextFrameAtMs;
+                    nextFrameAtMs += idealFrameTimeMs;
+                    if (nextFrameAtMs <= nowMs)
+                        nextFrameAtMs = nowMs;
 
-                    // Our frame target after applying drift correction.
-                    // If we ran too long before, this helps us shave a bit off and catch up.
-                    double adjustedFrameTimeMs = idealFrameTimeMs - accumulatedTimingDriftMs;
+                    if (Main.oldStatusText != Main.statusText)
+                    {
+                        Main.oldStatusText = Main.statusText;
+                        server.Console.WriteLine(Main.statusText);
+                    }
 
-                    if (timeSinceLastFrameStartMs >= adjustedFrameTimeMs) {
-
-                        // Record how far off we were from the ideal frame time
-                        // so the next frames can balance it out a little
-                        accumulatedTimingDriftMs += timeSinceLastFrameStartMs - idealFrameTimeMs;
-
-                        // New frame, fresh timer
-                        frameTimer.Reset();
-                        frameTimer.Start();
-
-                        // Only print status text when it actually changes,
-                        // no need to spam the console for fun
-                        if (Main.oldStatusText != Main.statusText) {
-                            Main.oldStatusText = Main.statusText;
-                            server.Console.WriteLine(Main.statusText); // Push the updated status line
+                    var anyConnections = server.hasRoutedConnections;
+                    if (anyConnections)
+                    {
+                        DetailedFPS.StartNextFrame();
+                        try
+                        {
+                            mainInstance.Update(server, gameTime);
                         }
-
-                        bool anyConnections = server.hasRoutedConnections;
-
-                        // Only bother running game logic if somebody's actually connected
-                        if (anyConnections) {
-                            DetailedFPS.StartNextFrame();
-                            try {
-                                mainInstance.Update(server, new GameTime()); // Run one full logic tick
-                            }
-                            catch (Exception ex) {
-                                server.Log.Warning("", ex: ex);
-                            }
-                        }
-
-                        // See how much time this frame has used up so far
-                        double frameElapsedMs = frameTimer.Elapsed.TotalMilliseconds;
-
-                        // Re-evaluate the target using the latest drift value
-                        adjustedFrameTimeMs = idealFrameTimeMs - accumulatedTimingDriftMs;
-                        double budgetedSleepMs = Math.Max(0d, adjustedFrameTimeMs - frameElapsedMs);
-
-                        if (anyConnections) {
-                            ref ServerPerformance.FrameData currentFrameData = ref data.CurrentFrameData;
-                            currentFrameData.SetBudget(accumulatedTimingDriftMs, adjustedFrameTimeMs, budgetedSleepMs);
-                        }
-
-                        // Still got time left this frame? Cool, let the thread chill a bit
-                        if (frameElapsedMs < adjustedFrameTimeMs) {
-                            // Sleep most of the remaining time,
-                            // but leave a tiny bit at the end so we don't overshoot too hard
-                            int requestedSleepMs = (int)(adjustedFrameTimeMs - frameElapsedMs) - 1;
-
-                            if (requestedSleepMs > 1) {
-                                Thread.Sleep(requestedSleepMs - 1);
-
-                                // Nobody online?
-                                // Reset the timing drift and nap a little longer to save some pointless work
-                                if (!anyConnections) {
-
-                                    accumulatedTimingDriftMs = 0;
-
-                                    Thread.Sleep(10);
-                                }
-                            }
+                        catch (Exception ex)
+                        {
+                            server.Log.Warning("", ex: ex);
                         }
                     }
 
-                    // Give up the rest of the current timeslice
-                    Thread.Sleep(0);
+                    var frameElapsedMs = frameTimer.Elapsed.TotalMilliseconds - nowMs;
+                    if (anyConnections)
+                    {
+                        var budgetedSleepMs = Math.Max(0d, nextFrameAtMs - frameTimer.Elapsed.TotalMilliseconds);
+                        ref var currentFrameData = ref data.CurrentFrameData;
+                        currentFrameData.SetBudget(
+                            Math.Max(0d, nowMs - scheduledFrameAtMs),
+                            idealFrameTimeMs,
+                            budgetedSleepMs);
+                    }
+
+                    if (frameElapsedMs <= 0d)
+                        Thread.Sleep(0);
                 }
             }
 
@@ -169,6 +146,56 @@ namespace UnifierTSL.Performance
                 il.IL.InsertBefore(call, Instruction.Create(OpCodes.Ldarg_S, il.Method.Parameters.First(p => p.Name is "remoteClient")));
                 call.OpCode = OpCodes.Call;
                 call.Operand = il.Import(typeof(Initializer).GetMethod(nameof(AsyncSend), BF_NonPub_Static) ?? throw new InvalidOperationException());
+            }
+
+            private static void ILDetour_InvokeCreatePacketWriter(ILContext il) {
+                var eventField = il.Import(typeof(OTAPI.HooksSystemContext.NetMessageSystemContext)
+                    .GetField(nameof(OTAPI.HooksSystemContext.NetMessageSystemContext.CreatePacketWriter), BF_NonPub_Instance)
+                    ?? throw new MissingFieldException(nameof(OTAPI.HooksSystemContext.NetMessageSystemContext), nameof(OTAPI.HooksSystemContext.NetMessageSystemContext.CreatePacketWriter)));
+                var packetWriterCtor = il.Import(typeof(OTAPI.PacketWriter).GetConstructor([typeof(Stream)])
+                    ?? throw new MissingMethodException(typeof(OTAPI.PacketWriter).FullName, ".ctor(Stream)"));
+                var original = il.Instrs[0];
+                var cursor = new ILCursor(il);
+                cursor.Goto(0);
+                cursor.Emit(OpCodes.Ldarg_0);
+                cursor.Emit(OpCodes.Ldfld, eventField);
+                cursor.Emit(OpCodes.Brtrue, original);
+                cursor.Emit(OpCodes.Ldarg_1);
+                cursor.Emit(OpCodes.Newobj, packetWriterCtor);
+                cursor.Emit(OpCodes.Ret);
+            }
+
+            private static void ILDetour_InvokeSendBytesNullPath(ILContext il) {
+                var eventField = il.Import(typeof(OTAPI.HooksSystemContext.NetMessageSystemContext)
+                    .GetField(nameof(OTAPI.HooksSystemContext.NetMessageSystemContext.SendBytes), BF_NonPub_Instance)
+                    ?? throw new MissingFieldException(nameof(OTAPI.HooksSystemContext.NetMessageSystemContext), nameof(OTAPI.HooksSystemContext.NetMessageSystemContext.SendBytes)));
+                var original = il.Instrs[0];
+                var cursor = new ILCursor(il);
+                cursor.Goto(0);
+                cursor.Emit(OpCodes.Ldarg_0);
+                cursor.Emit(OpCodes.Ldfld, eventField);
+                cursor.Emit(OpCodes.Brtrue, original);
+                cursor.Emit(OpCodes.Ldarg_1);
+                cursor.Emit(OpCodes.Ldarg_2);
+                cursor.Emit(OpCodes.Ldarg_3);
+                cursor.Emit(OpCodes.Ldarg, 4);
+                cursor.Emit(OpCodes.Ldarg, 5);
+                cursor.Emit(OpCodes.Ldarg, 6);
+                cursor.Emit(OpCodes.Ldarg, 7);
+                cursor.Emit(OpCodes.Call, il.Import(typeof(Initializer).GetMethod(nameof(AsyncSend), BF_NonPub_Static) ?? throw new InvalidOperationException()));
+                cursor.Emit(OpCodes.Ret);
+            }
+
+            private static void ILDetour_NetMessage_OnPacketWrite(ILContext il) {
+                var eventField = il.Import(typeof(HookEvents.Terraria.NetMessage)
+                    .GetField(nameof(HookEvents.Terraria.NetMessage.OnPacketWrite), BF_NonPub_Static)
+                    ?? throw new MissingFieldException(nameof(HookEvents.Terraria.NetMessage), nameof(HookEvents.Terraria.NetMessage.OnPacketWrite)));
+                var original = il.Instrs[0];
+                var cursor = new ILCursor(il);
+                cursor.Goto(0);
+                cursor.Emit(OpCodes.Ldsfld, eventField);
+                cursor.Emit(OpCodes.Brtrue, original);
+                cursor.Emit(OpCodes.Ret);
             }
 
             static void AsyncSend(ISocket socket, byte[] data, int offset, int size, SocketSendCallback callback, object state, int clientId) {

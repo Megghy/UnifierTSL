@@ -302,6 +302,9 @@ namespace UnifierTSL
         public static readonly MessageBuffer[] globalMsgBuffers = new MessageBuffer[Netplay.MaxConnections + 1];
         private static readonly ServerContext?[] clientCurrentlyServers = new ServerContext?[Netplay.MaxConnections];
         private static readonly PendingConnection[] pendingConnects = new PendingConnection[Netplay.MaxConnections];
+        private sealed record RoutedClientSnapshot(ImmutableArray<int> Indices);
+        private static readonly Lock routedClientGate = new();
+        private static RoutedClientSnapshot routedClientSnapshot = new([]);
 
         private static ImmutableArray<ServerContext> servers = [];
         public static ImmutableArray<ServerContext> Servers => servers;
@@ -320,7 +323,19 @@ namespace UnifierTSL
         public static ServerContext? GetClientCurrentlyServer(int clientIndex)
             => Volatile.Read(ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(clientCurrentlyServers), clientIndex));
         private static void SetClientCurrentlyServer(int clientIndex, ServerContext? server)
-            => Volatile.Write(ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(clientCurrentlyServers), clientIndex), server);
+        {
+            Volatile.Write(ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(clientCurrentlyServers), clientIndex), server);
+            lock (routedClientGate)
+            {
+                var current = routedClientSnapshot.Indices;
+                var updated = server is null
+                    ? current.Remove(clientIndex)
+                    : current.Contains(clientIndex) ? current : current.Add(clientIndex);
+                if (!updated.Equals(current))
+                    routedClientSnapshot = new(updated);
+            }
+        }
+
         public static Player GetPlayer(int clientIndex) => players[clientIndex];
         //{
         //    var server = GetClientCurrentlyServer(clientIndex);
@@ -498,7 +513,9 @@ namespace UnifierTSL
 
         private static void UpdateServerInMainThread(On.Terraria.NetplaySystemContext.orig_UpdateServerInMainThread orig, NetplaySystemContext self) {
             UnifiedServerProcess.RootContext server = self.root;
-            for (int i = 0; i < Netplay.MaxConnections; i++) {
+            var routedClients = Volatile.Read(ref routedClientSnapshot).Indices;
+            for (var index = 0; index < routedClients.Length; index++) {
+                var i = routedClients[index];
                 if (server != GetClientCurrentlyServer(i)) {
                     continue;
                 }
@@ -639,6 +656,11 @@ namespace UnifierTSL
 
                                 client.Socket = null;
                                 // SetClientCurrentlyServer(i, main);
+                            }
+                            else {
+                                // CheckBytes runs on the server thread and approves the reset.
+                                // Keep that thread active until it has observed the termination.
+                                server.routedConnectionCountAccumulator += 1;
                             }
                             continue;
                         }
