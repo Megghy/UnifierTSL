@@ -27,6 +27,8 @@ namespace UnifierTSL.Performance
                 IL.OTAPI.HooksSystemContext.NetMessageSystemContext.InvokeSendBytes += ILDetour_InvokeSendBytesNullPath;
                 IL.OTAPI.HooksSystemContext.NetMessageSystemContext.InvokeCreatePacketWriter += ILDetour_InvokeCreatePacketWriter;
                 IL.Terraria.NetMessage.OnPacketWrite += ILDetour_NetMessage_OnPacketWrite;
+                IL.Terraria.NetMessageSystemContext.SendData += ILDetour_NetMessage_SendDataNullPath;
+                IL.Terraria.NetMessageSystemContext.SendPacket += ILDetour_NetMessage_SendPacketNullPath;
 
                 IL.Terraria.Net.NetManager.mfwh_Broadcast_NetPacket_BroadcastCondition_int += ILDetour_NetManager_SendData;
                 IL.Terraria.Net.NetManager.mfwh_Broadcast_NetPacket_int += ILDetour_NetManager_SendData;
@@ -195,6 +197,37 @@ namespace UnifierTSL.Performance
                 cursor.Goto(0);
                 cursor.Emit(OpCodes.Ldsfld, eventField);
                 cursor.Emit(OpCodes.Brtrue, original);
+                cursor.Emit(OpCodes.Ret);
+            }
+
+            private static void ILDetour_NetMessage_SendDataNullPath(ILContext il)
+                => InsertDirectSendPath(
+                    il,
+                    typeof(HookEvents.Terraria.NetMessage).GetField(nameof(HookEvents.Terraria.NetMessage.SendData), BF_NonPub_Static)
+                        ?? throw new MissingFieldException(nameof(HookEvents.Terraria.NetMessage), nameof(HookEvents.Terraria.NetMessage.SendData)),
+                    nameof(NetMessageSystemContext.mfwh_SendData),
+                    11);
+
+            private static void ILDetour_NetMessage_SendPacketNullPath(ILContext il)
+                => InsertDirectSendPath(
+                    il,
+                    typeof(HookEvents.Terraria.NetMessage).GetField(nameof(HookEvents.Terraria.NetMessage.SendPacket), BF_NonPub_Static)
+                        ?? throw new MissingFieldException(nameof(HookEvents.Terraria.NetMessage), nameof(HookEvents.Terraria.NetMessage.SendPacket)),
+                    nameof(NetMessageSystemContext.mfwh_SendPacket),
+                    2);
+
+            private static void InsertDirectSendPath(ILContext il, FieldInfo eventField, string methodName, int argumentCount) {
+                var directMethod = typeof(NetMessageSystemContext).GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                    ?? throw new MissingMethodException(typeof(NetMessageSystemContext).FullName, methodName);
+                var original = il.Instrs[0];
+                var cursor = new ILCursor(il);
+                cursor.Goto(0);
+                cursor.Emit(OpCodes.Ldsfld, il.Import(eventField));
+                cursor.Emit(OpCodes.Brtrue, original);
+                cursor.Emit(OpCodes.Ldarg_0);
+                for (var argument = 1; argument <= argumentCount; argument++)
+                    cursor.Emit(OpCodes.Ldarg, argument);
+                cursor.Emit(OpCodes.Call, il.Import(directMethod));
                 cursor.Emit(OpCodes.Ret);
             }
 
