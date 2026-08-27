@@ -70,35 +70,29 @@ namespace TShockAPI
         }
 
         private void OnPlayerUpdate(ref ReceivePacketEvent<PlayerControls> args) {
-			static void PostMovement(in ReceivePacketEvent<PlayerControls> args, PacketHandleMode handle) { 
-                if (handle is PacketHandleMode.Cancel) {
-					return;
-                }
-                var player = args.GetTSPlayer();
-				var server = args.LocalReceiver.Server;
-				var worldId = server.Main.worldID.ToString();
+            if (args.HandleMode is PacketHandleMode.Cancel)
+                return;
 
-                // Store the player's last known region and update the current based on known regions at their coordinates.
-                var oldRegion = player.CurrentRegion;
-				var _regionManager = TShock.RegionSystem._regionManager;
-                player.CurrentRegion = _regionManager.GetTopRegion(_regionManager.InAreaRegion(worldId, player.TileX, player.TileY));
+            var player = args.GetTSPlayer();
+            var pos = args.Packet.Position;
+            var tileX = (int)(pos.X / 16);
+            var tileY = (int)(pos.Y / 16);
+            if (!player.TryBeginRegionQuery(tileX, tileY, _regionManager.Generation))
+                return;
 
-                // Do not fire any hooks if the player has not left and/or entered a region.
-                if (player.CurrentRegion == oldRegion) {
-                    return;
-                }
+            var oldRegion = player.CurrentRegion;
+            Region? next = null;
+            if (_regionManager.Regions.Count != 0)
+                next = _regionManager.GetTopRegionAt(args.LocalReceiver.Server.Main.worldID.ToString(), tileX, tileY);
 
-                // Ensure that the player has left a region before invoking the RegionLeft event
-                if (oldRegion != null) {
-                    RegionHooks.OnRegionLeft(player, oldRegion);
-                }
+            if (next == oldRegion)
+                return;
 
-                // Ensure that the player has entered a valid region before invoking the RegionEntered event 
-                if (player.CurrentRegion != null) {
-                    RegionHooks.OnRegionEntered(player, player.CurrentRegion);
-                }
-            }
-			args.PacketProcessed += PostMovement;
+            player.CurrentRegion = next;
+            if (oldRegion != null)
+                RegionHooks.OnRegionLeft(player, oldRegion);
+            if (next != null)
+                RegionHooks.OnRegionEntered(player, next);
         }
 
         private void OnTileEdit(ref ReceivePacketEvent<TileChange> args) {

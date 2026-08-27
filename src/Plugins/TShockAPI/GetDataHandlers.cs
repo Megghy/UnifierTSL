@@ -746,22 +746,13 @@ namespace TShockAPI
 
         private static void HandleProjectileNew(ref ReceivePacketEvent<SyncProjectile> args) {
             var tsPlayer = args.GetTSPlayer();
-            var server = args.LocalReceiver.Server;
             var key = args.Packet.Key;
 
             if (key.Spawner != tsPlayer.Index || key.Index >= Main.maxProjectiles) {
                 return;
             }
 
-            lock (tsPlayer.RecentlyCreatedProjectiles) {
-                if (!tsPlayer.RecentlyCreatedProjectiles.Any(p => p.Key == key)) {
-                    tsPlayer.RecentlyCreatedProjectiles.Add(new ProjectileStruct() {
-                        Key = key,
-                        Type = args.Packet.ProjType,
-                        CreatedAt = DateTime.Now
-                    });
-                }
-            }
+            tsPlayer.TrackRecentProjectile(key, args.Packet.ProjType);
         }
 
         private static void HandleNpcStrike(ref ReceivePacketEvent<StrikeNPC> args) {
@@ -835,7 +826,8 @@ namespace TShockAPI
 
             short type = (short)projectile.type;
 
-            // TODO: This needs to be moved somewhere else.
+            if (tsPlayer.IgnoreProjectileContentChecks)
+                return;
 
             if (type == ProjectileID.Tombstone) {
                 server.Log.Debug(GetString("GetDataHandlers / HandleProjectileKill rejected tombstone {0}", tsPlayer.Name));

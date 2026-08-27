@@ -35,6 +35,7 @@ namespace TShockAPI.DB
             [Column] public int Z { get; set; }
         }
         public List<Region> Regions = new List<Region>();
+        public int Generation { get; private set; }
         readonly Func<DataConnection> _dbFactory;
         public RegionManager(DataConnection db) {
             _dbFactory = DataConnectionFactory.FromPrototype(db);
@@ -79,6 +80,7 @@ namespace TShockAPI.DB
 
                     Regions.Add(r);
                 }
+                NoteRegionsChanged();
             }
             catch (Exception ex) {
                 TShock.Log.Error(ex.ToString());
@@ -112,6 +114,7 @@ namespace TShockAPI.DB
 
                 Region region = new Region(newRegion.Id, new Rectangle(tx, ty, width, height), regionname, owner, true, worldid, z);
                 Regions.Add(region);
+                NoteRegionsChanged();
                 Hooks.RegionHooks.OnRegionCreated(region);
                 return true;
             }
@@ -131,6 +134,7 @@ namespace TShockAPI.DB
 
                 var region = Regions.FirstOrDefault(r => r.ID == id && r.WorldID == worldid);
                 Regions.RemoveAll(r => r.ID == id && r.WorldID == worldid);
+                NoteRegionsChanged();
                 Hooks.RegionHooks.OnRegionDeleted(region);
                 return true;
             }
@@ -150,6 +154,7 @@ namespace TShockAPI.DB
 
                 var region = Regions.FirstOrDefault(r => r.Name == name && r.WorldID == worldid);
                 Regions.RemoveAll(r => r.Name == name && r.WorldID == worldid);
+                NoteRegionsChanged();
                 Hooks.RegionHooks.OnRegionDeleted(region);
                 return true;
             }
@@ -236,6 +241,7 @@ namespace TShockAPI.DB
 
                 foreach (var region in Regions.Where(r => r.Name == regionName))
                     region.Area = new Rectangle(X, Y, width, height);
+                NoteRegionsChanged();
 
                 regionTable.Where(r => r.RegionName == regionName && r.WorldID == worldid)
                     .Set(r => r.X1, X)
@@ -347,6 +353,7 @@ namespace TShockAPI.DB
             try {
                 Region region = Regions.First(r => string.Equals(regionName, r.Name, StringComparison.OrdinalIgnoreCase));
                 region.Area = new Rectangle(x, y, width, height);
+                NoteRegionsChanged();
 
                 using var db = _dbFactory();
                 db.GetTable<RegionTable>().Where(r => r.RegionName == regionName && r.WorldID == worldid)
@@ -469,6 +476,7 @@ namespace TShockAPI.DB
                 var region = GetRegionByName(name, worldid);
                 if (region != null)
                     region.Z = z;
+                NoteRegionsChanged();
                 return true;
             }
             catch (Exception ex) {
@@ -508,6 +516,24 @@ namespace TShockAPI.DB
             }
             return ret;
         }
+
+        public Region? GetTopRegionAt(string worldId, int x, int y)
+            => GetTopRegionAt(Regions, worldId, x, y);
+
+        public static Region? GetTopRegionAt(List<Region> regions, string worldId, int x, int y)
+        {
+            Region? top = null;
+            for (int i = 0; i < regions.Count; i++)
+            {
+                var region = regions[i];
+                if (region.WorldID == worldId && region.InArea(x, y) && (top is null || region.Z > top.Z))
+                    top = region;
+            }
+            return top;
+        }
+
+        void NoteRegionsChanged() => Generation++;
+
         /// <summary>
         /// Checks if a given player can build in a region at the given (x, y) coordinate
         /// </summary>
@@ -519,15 +545,8 @@ namespace TShockAPI.DB
             if (!ply.HasPermission(Permissions.canbuild)) {
                 return false;
             }
-            Region? top = null;
-
-            foreach (Region region in Regions.ToList()) {
-                if (region.InArea(x, y)) {
-                    if (top == null || region.Z > top.Z)
-                        top = region;
-                }
-            }
-            return top == null || top.HasPermissionToBuildInRegion(ply);
+            var top = GetTopRegionAt(server.Main.worldID.ToString(), x, y);
+            return top is null || top.HasPermissionToBuildInRegion(ply);
         }
 
         /// <summary>

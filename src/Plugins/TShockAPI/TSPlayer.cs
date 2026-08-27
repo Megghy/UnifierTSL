@@ -214,6 +214,11 @@ namespace TShockAPI
         public bool IgnoreSSCPackets { get; set; }
 
         /// <summary>
+        /// 跳过弹幕内容检查（禁弹幕、伤害上限、敌对弹幕、AI、阈值、kill 封禁）。协议合法性与 disabled 仍检查。
+        /// </summary>
+        public bool IgnoreProjectileContentChecks { get; set; }
+
+        /// <summary>
         /// A system to delay Remembered Position Teleports a few seconds
         /// </summary>
         public int RPPending = 0;
@@ -964,10 +969,72 @@ namespace TShockAPI
         /// </summary>
         public readonly List<ProjectileStruct> RecentlyCreatedProjectiles = [];
 
+        internal bool TryBeginRegionQuery(int tileX, int tileY, int generation)
+        {
+            if (_regionQueryTileX == tileX && _regionQueryTileY == tileY && _regionQueryGeneration == generation)
+                return false;
+            _regionQueryTileX = tileX;
+            _regionQueryTileY = tileY;
+            _regionQueryGeneration = generation;
+            return true;
+        }
+
+        internal void TrackRecentProjectile(ProjectileKey key, short type, bool replaceKilled = false)
+        {
+            lock (RecentlyCreatedProjectiles)
+            {
+                var list = RecentlyCreatedProjectiles;
+                var write = 0;
+                var exists = false;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    var projectile = list[i];
+                    if (projectile.Key == key)
+                    {
+                        if (replaceKilled && projectile.Killed)
+                            continue;
+                        exists = true;
+                    }
+                    list[write++] = projectile;
+                }
+                if (write < list.Count)
+                    list.RemoveRange(write, list.Count - write);
+                if (!exists)
+                {
+                    list.Add(new ProjectileStruct
+                    {
+                        Key = key,
+                        Type = type,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+        }
+
+        internal void PurgeRecentProjectiles(DateTime threshold)
+        {
+            lock (RecentlyCreatedProjectiles)
+            {
+                var list = RecentlyCreatedProjectiles;
+                var write = 0;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    if (list[i].CreatedAt > threshold)
+                        list[write++] = list[i];
+                }
+                if (write < list.Count)
+                    list.RemoveRange(write, list.Count - write);
+            }
+        }
+
         /// <summary>
         /// The current region this player is in, or null if none.
         /// </summary>
         public Region? CurrentRegion = null;
+
+        int _regionQueryTileX = int.MinValue;
+        int _regionQueryTileY = int.MinValue;
+        int _regionQueryGeneration = int.MinValue;
 
         /// <summary>
         /// Contains data stored by plugins

@@ -58,6 +58,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<InternalsVisibleTo Include="BossFramework.Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<None Include="NUGET.md" Pack="true" PackagePath="\" />
 	</ItemGroup>
 

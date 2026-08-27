@@ -1477,7 +1477,7 @@ namespace TShockAPI
 
             Item item = new Item();
             item.netDefaults(server, type);
-            if ((stacks > item.maxStack || stacks <= 0) || (TShock.ItemBans.DataModel.ItemIsBanned(EnglishLanguage.GetItemNameById(item.type), tsPlayer) && !tsPlayer.HasPermission(Permissions.allowdroppingbanneditems)))
+            if ((stacks > item.maxStack || stacks <= 0) || (TShock.ItemBans.DataModel.ItemIsBanned(item.type, tsPlayer) && !tsPlayer.HasPermission(Permissions.allowdroppingbanneditems)))
             {
                 server.Log.Debug(GetString("Bouncer / OnItemDrop rejected from drop item ban check / max stack check / min stack check from {0}", tsPlayer.Name));
                 tsPlayer.SendData(PacketTypes.SyncItemDespawn, "", id);
@@ -1522,14 +1522,12 @@ namespace TShockAPI
         {
             var server = args.LocalReceiver.Server;
             var tsPlayer = args.GetTSPlayer();
-            var setting = TShock.Config.GetServerSettings(server.Name);
 
             ProjectileKey key = args.Packet.Key;
             Vector2 pos = args.Packet.Position;
             Vector2 vel = args.Packet.Velocity;
             short damage = args.Packet.Damage;
             short type = args.Packet.ProjType;
-            Span<float> ai = [args.Packet.AI1, args.Packet.AI2, args.Packet.AI3];
 
             if (key.Spawner != tsPlayer.Index || key.Index >= Main.maxProjectiles)
             {
@@ -1546,20 +1544,11 @@ namespace TShockAPI
                 return;
             }
 
-            bool isNewProjectile = !key.TryGet(server, out _);
-
             // Clients do send NaN values so we can't just kick them
             // See https://github.com/Pryaxis/TShock/issues/3076
-            if (!float.IsFinite(pos.X) || !float.IsFinite(pos.Y))
+            if (!float.IsFinite(pos.X) || !float.IsFinite(pos.Y) || !float.IsFinite(vel.X) || !float.IsFinite(vel.Y))
             {
-                server.Log.Info(GetString("Bouncer / OnNewProjectile rejected set position to infinity or NaN from {0}", tsPlayer.Name));
-                args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true;
-                return;
-            }
-
-            if (!float.IsFinite(vel.X) || !float.IsFinite(vel.Y))
-            {
-                server.Log.Info(GetString("Bouncer / OnNewProjectile rejected set velocity to infinity or NaN from {0}", tsPlayer.Name));
+                server.Log.Info(GetString("Bouncer / OnNewProjectile rejected set position or velocity to infinity or NaN from {0}", tsPlayer.Name));
                 args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true;
                 return;
             }
@@ -1567,26 +1556,25 @@ namespace TShockAPI
             if (tsPlayer.IsBeingDisabled())
             {
                 server.Log.Debug(GetString("Bouncer / OnNewProjectile rejected from disabled from {0}", tsPlayer.Name));
-
-                // Client will fight the server if we remove pets, silently reject instead.
                 if (!Main.projPet[type] && !ProjectileID.Sets.LightPet[type])
                     tsPlayer.RemoveProjectile(key);
-
                 args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true;
                 return;
             }
+
+            if (tsPlayer.IgnoreProjectileContentChecks)
+                return;
 
             if (tsPlayer.IsBouncerThrottled())
             {
                 server.Log.Debug(GetString("Bouncer / OnNewProjectile rejected from bouncer throttle from {0}", tsPlayer.Name));
-
-                // Client will fight the server if we remove pets, silently reject instead.
                 if (!Main.projPet[type] && !ProjectileID.Sets.LightPet[type])
                     tsPlayer.RemoveProjectile(key);
-
                 args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true;
                 return;
             }
+
+            var setting = TShock.Config.GetServerSettings(server.Name);
 
             if (TShock.ProjectileBans.ProjectileIsBanned(type, tsPlayer))
             {
@@ -1607,73 +1595,6 @@ namespace TShockAPI
                 return;
             }
 
-            if (type == ProjectileID.PortalGunGate)
-            {
-                var wrappedAngle = MathHelper.WrapAngle(ai[0]);
-                var discreteDirection = (int)Math.Round(wrappedAngle / (MathF.PI / 4f));
-                if (discreteDirection is < -3 or > 4)
-                {
-                    server.Log.Debug(GetString("Bouncer / OnNewProjectile rejected from portal gate from {0} (invalid angle: {1})", tsPlayer.Name, discreteDirection));
-                    tsPlayer.RemoveProjectile(key);
-                    args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true;
-                    return;
-                }
-
-                int boltIndex;
-                lock (tsPlayer.RecentlyCreatedProjectiles)
-                {
-                    boltIndex = tsPlayer.RecentlyCreatedProjectiles.FindIndex(p =>
-                        p.Type == ProjectileID.PortalGunBolt &&
-                        !p.Killed &&
-                        p.Key.TryGetActive(server, out _));
-                    if (boltIndex >= 0)
-                    {
-                        var bolt = tsPlayer.RecentlyCreatedProjectiles[boltIndex];
-                        bolt.Killed = true;
-                        tsPlayer.RecentlyCreatedProjectiles[boltIndex] = bolt;
-                    }
-                }
-                if (boltIndex < 0)
-                {
-                    server.Log.Debug(GetString("Bouncer / OnNewProjectile rejected from portal gate from {0} (missing active Portal Gun bolt)", tsPlayer.Name));
-                    tsPlayer.RemoveProjectile(key);
-                    args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true;
-                    return;
-                }
-            }
-
-            /// If the projectile is a directional projectile, check if the player is holding their respected item to validate the projectile creation.
-            if (directionalProjectiles.ContainsKey(type))
-            {
-                if (directionalProjectiles[type] == tsPlayer.TPlayer.HeldItem.type)
-                {
-                    return;
-                }
-            }
-
-            /// If the created projectile is a golf club, check if the player is holding one of the golf club items to validate the projectile creation.
-            if (type == ProjectileID.GolfClubHelper && Handlers.LandGolfBallInCupHandler.GolfClubItemIDs.Contains(tsPlayer.TPlayer.HeldItem.type))
-            {
-                return;
-            }
-
-            /// If the created projectile is a golf ball and the player is not holding a golf club item and neither a golf ball item and neither they have had a golf club projectile created recently.
-            bool usedGolfClub;
-            lock (tsPlayer.RecentlyCreatedProjectiles)
-            {
-                usedGolfClub = tsPlayer.RecentlyCreatedProjectiles.Any(p => p.Type == ProjectileID.GolfClubHelper);
-            }
-            if (Handlers.LandGolfBallInCupHandler.GolfBallProjectileIDs.Contains(type) &&
-                !Handlers.LandGolfBallInCupHandler.GolfClubItemIDs.Contains(tsPlayer.TPlayer.HeldItem.type) &&
-                !Handlers.LandGolfBallInCupHandler.GolfBallItemIDs.Contains(tsPlayer.TPlayer.HeldItem.type) &&
-                !usedGolfClub)
-            {
-                server.Log.Debug(GetString("Bouncer / OnNewProjectile please report to tshock about this! normally this is a reject from {0} {1} (golf)", tsPlayer.Name, type));
-            }
-
-            // server.Main.projHostile contains projectiles that can harm players
-            // without PvP enabled and belong to enemy mobs, so they shouldn't be
-            // possible for players to create. (Source: Ijwu, QuiCM)
             if (server.Main.projHostile[type])
             {
                 server.Log.Debug(GetString("Bouncer / OnNewProjectile rejected from hostile projectile from {0}", tsPlayer.Name));
@@ -1682,41 +1603,12 @@ namespace TShockAPI
                 return;
             }
 
-            // Tombstones should never be permitted by players
-            // This check means like, invalid or hacked tombstones (sent from hacked clients)
-            // Death does not create a tombstone projectile by default
             if (type == ProjectileID.Tombstone)
             {
                 server.Log.Debug(GetString("Bouncer / OnNewProjectile rejected from tombstones from {0}", tsPlayer.Name));
                 tsPlayer.RemoveProjectile(key);
                 args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true;
                 return;
-            }
-
-            if (!setting.IgnoreProjUpdate && !tsPlayer.HasPermission(Permissions.ignoreprojectiledetection))
-            {
-                if (type == ProjectileID.BlowupSmokeMoonlord
-                    || type == ProjectileID.PhantasmalEye
-                    || type == ProjectileID.CultistBossIceMist
-                    || (type >= ProjectileID.MoonlordBullet && type <= ProjectileID.MoonlordTurretLaser)
-                    || type == ProjectileID.DeathLaser || type == ProjectileID.Landmine
-                    || type == ProjectileID.BulletDeadeye || type == ProjectileID.BoulderStaffOfEarth
-                    || (type > ProjectileID.ConfettiMelee && type < ProjectileID.SpiritHeal)
-                    || (type >= ProjectileID.FlamingWood && type <= ProjectileID.GreekFire3)
-                    || (type >= ProjectileID.PineNeedleHostile && type <= ProjectileID.Spike)
-                    || (type >= ProjectileID.MartianTurretBolt && type <= ProjectileID.RayGunnerLaser)
-                    || type == ProjectileID.CultistBossLightningOrb)
-                {
-                    server.Log.Debug(GetString("Bouncer / OnNewProjectile rejected from weird check from {0} {1}", tsPlayer.Name, type));
-                    server.Log.Debug(GetString("Certain projectiles have been ignored for cheat detection."));
-                }
-                else
-                {
-                    server.Log.Debug(GetString("Bouncer / OnNewProjectile please report to tshock about this! normally this is a reject from {0} {1}", tsPlayer.Name, type));
-                    // tsPlayer.Disable(String.Format("Does not have projectile permission to update projectile. ({0})", type), DisableFlags.WriteToLogAndConsole);
-                }
-                // args.Handled = false;
-                // return;
             }
 
             if (tsPlayer.ProjectileThreshold >= setting.ProjectileThreshold)
@@ -1732,11 +1624,11 @@ namespace TShockAPI
                 }
 
                 server.Log.Debug(GetString("Bouncer / OnNewProjectile rejected from projectile create threshold from {0} {1}/{2}", tsPlayer.Name, tsPlayer.ProjectileThreshold, setting.ProjectileThreshold));
-                server.Log.Debug(GetString("If this player wasn't hacking, please report the projectile create threshold they were disabled for to TShock so we can improve this!"));
                 args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true;
                 return;
             }
 
+            Span<float> ai = [args.Packet.AI1, args.Packet.AI2, args.Packet.AI3];
             if (
                 (Projectile_MaxValuesAI.ContainsKey(type) &&
                     (Projectile_MaxValuesAI[type] < ai[0] || Projectile_MinValuesAI[type] > ai[0])) ||
@@ -1750,14 +1642,6 @@ namespace TShockAPI
                 return;
             }
 
-            /*
-             * ai - Arguments that Projectile.AI uses for easier projectile control.
-             *	ai[0] - Distance from player (Doesn't affect the result very much)
-             *	ai[1] - The identifier of the object that will fly.
-             *
-             * FinalFractalHelper._fractalProfiles - A list of items that must be used in Zenith. (And also their colors)
-             *	If you add an item to this collection, it will also fly in the Zenith. (not active from server)
-            */
             if (setting.DisableModifiedZenith && type == ProjectileID.FinalFractal && (ai[0] < -100 || ai[0] > 101) && !Terraria.Graphics.FinalFractalHelper._fractalProfiles.ContainsKey((int)ai[1]))
             {
                 server.Log.Debug(GetString("Bouncer / OnNewProjectile rejected from bouncer modified Zenith projectile from {0}.", tsPlayer.Name));
@@ -1766,27 +1650,21 @@ namespace TShockAPI
                 return;
             }
 
-            if (!tsPlayer.HasPermission(Permissions.ignoreprojectiledetection))
+            if (!tsPlayer.HasPermission(Permissions.ignoreprojectiledetection)
+                && !(type == ProjectileID.CrystalShard && setting.ProjIgnoreShrapnel)
+                && !key.TryGet(server, out _))
             {
-                if (type == ProjectileID.CrystalShard && setting.ProjIgnoreShrapnel) // Ignore crystal shards
-                {
-                    server.Log.Debug(GetString("Ignoring shrapnel per config.."));
-                }
-                else if (isNewProjectile)
-                {
-                    tsPlayer.ProjectileThreshold++; // Creating new projectile
-                }
+                tsPlayer.ProjectileThreshold++;
             }
 
-            if ((type == ProjectileID.Bomb
+            if (type == ProjectileID.Bomb
                 || type == ProjectileID.Dynamite
                 || type == ProjectileID.StickyBomb
                 || type == ProjectileID.StickyDynamite
                 || type == ProjectileID.BombFish
                 || type == ProjectileID.ScarabBomb
-                || type == ProjectileID.DirtBomb))
+                || type == ProjectileID.DirtBomb)
             {
-                //  Denotes that the player has recently set a fuse - used for cheat detection.
                 tsPlayer.RecentFuse = 10;
             }
         }
@@ -1893,6 +1771,9 @@ namespace TShockAPI
                 args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true;
                 return;
             }
+
+            if (tsPlayer.IgnoreProjectileContentChecks)
+                return;
 
             if (tsPlayer.IsBouncerThrottled())
             {
@@ -2209,7 +2090,7 @@ namespace TShockAPI
                     args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true;
                 }
 
-                if (TShock.ItemBans.DataModel.ItemIsBanned(EnglishLanguage.GetItemNameById(selectedItemType), tsPlayer))
+                if (TShock.ItemBans.DataModel.ItemIsBanned(selectedItemType, tsPlayer))
                 {
                     Reject(ref args, GetString("Using banned {0} to manipulate liquid", Lang.GetItemNameValue(selectedItemType)));
                     return;
@@ -2218,28 +2099,28 @@ namespace TShockAPI
                 switch (type)
                 {
                     case LiquidType.Water:
-                        if (TShock.ItemBans.DataModel.ItemIsBanned(EnglishLanguage.GetItemNameById(ItemID.WaterBucket), tsPlayer))
+                        if (TShock.ItemBans.DataModel.ItemIsBanned(ItemID.WaterBucket, tsPlayer))
                         {
                             Reject(ref args, GetString("Using banned water bucket without permissions"));
                             return;
                         }
                         break;
                     case LiquidType.Lava:
-                        if (TShock.ItemBans.DataModel.ItemIsBanned(EnglishLanguage.GetItemNameById(ItemID.LavaBucket), tsPlayer))
+                        if (TShock.ItemBans.DataModel.ItemIsBanned(ItemID.LavaBucket, tsPlayer))
                         {
                             Reject(ref args, GetString("Using banned lava bucket without permissions"));
                             return;
                         }
                         break;
                     case LiquidType.Honey:
-                        if (TShock.ItemBans.DataModel.ItemIsBanned(EnglishLanguage.GetItemNameById(ItemID.HoneyBucket), tsPlayer))
+                        if (TShock.ItemBans.DataModel.ItemIsBanned(ItemID.HoneyBucket, tsPlayer))
                         {
                             Reject(ref args, GetString("Using banned honey bucket without permissions"));
                             return;
                         }
                         break;
                     case LiquidType.Shimmer:
-                        if (TShock.ItemBans.DataModel.ItemIsBanned(EnglishLanguage.GetItemNameById(ItemID.BottomlessShimmerBucket), tsPlayer))
+                        if (TShock.ItemBans.DataModel.ItemIsBanned(ItemID.BottomlessShimmerBucket, tsPlayer))
                         {
                             Reject(ref args, GetString("Using banned shimmering water bucket without permissions"));
                             return;
@@ -3586,11 +3467,7 @@ namespace TShockAPI
             {
                 if (player != null && player.TPlayer.whoAmI >= 0)
                 {
-                    var threshold = DateTime.Now.AddSeconds(-5);
-                    lock (player.RecentlyCreatedProjectiles)
-                    {
-                        player.RecentlyCreatedProjectiles.RemoveAll(s => s.CreatedAt <= threshold);
-                    }
+                    player.PurgeRecentProjectiles(DateTime.UtcNow.AddSeconds(-5));
                 }
             }
         }
@@ -3696,44 +3573,6 @@ namespace TShockAPI
             TileID.LunarMonolith,
             TileID.TargetDummy,
             TileID.Campfire
-        };
-
-        /// <summary>
-        /// These projectiles have been added or modified with Terraria 1.4.
-        /// They come from normal items, but to have the directional functionality, they must be projectiles.
-        /// </summary>
-        private static Dictionary<int, int> directionalProjectiles = new Dictionary<int, int>()
-        {
-            ///Spears
-            { ProjectileID.DarkLance, ItemID.DarkLance},
-            { ProjectileID.Trident, ItemID.Trident},
-            { ProjectileID.Spear, ItemID.Spear},
-            { ProjectileID.MythrilHalberd, ItemID.MythrilHalberd},
-            { ProjectileID.AdamantiteGlaive, ItemID.AdamantiteGlaive},
-            { ProjectileID.CobaltNaginata, ItemID.CobaltNaginata},
-            { ProjectileID.Gungnir, ItemID.Gungnir},
-            { ProjectileID.MushroomSpear, ItemID.MushroomSpear},
-            { ProjectileID.TheRottedFork, ItemID.TheRottedFork},
-            { ProjectileID.PalladiumPike, ItemID.PalladiumPike},
-            { ProjectileID.OrichalcumHalberd, ItemID.OrichalcumHalberd},
-            { ProjectileID.TitaniumTrident, ItemID.TitaniumTrident},
-            { ProjectileID.ChlorophytePartisan, ItemID.ChlorophytePartisan},
-            { ProjectileID.NorthPoleWeapon, ItemID.NorthPole},
-            { ProjectileID.ObsidianSwordfish, ItemID.ObsidianSwordfish},
-            { ProjectileID.Swordfish, ItemID.Swordfish},
-            { ProjectileID.MonkStaffT2, ItemID.MonkStaffT2},
-            { ProjectileID.ThunderSpear, ItemID.ThunderSpear},
-            { ProjectileID.GladiusStab, ItemID.Gladius},
-            /// ShortSwords
-            { ProjectileID.RulerStab, ItemID.Ruler },
-            { ProjectileID.CopperShortswordStab, ItemID.CopperShortsword },
-            { ProjectileID.TinShortswordStab, ItemID.TinShortsword },
-            { ProjectileID.IronShortswordStab, ItemID.IronShortsword },
-            { ProjectileID.LeadShortswordStab, ItemID.LeadShortsword },
-            { ProjectileID.SilverShortswordStab, ItemID.SilverShortsword },
-            { ProjectileID.TungstenShortswordStab, ItemID.TungstenShortsword },
-            { ProjectileID.GoldShortswordStab, ItemID.GoldShortsword },
-            { ProjectileID.PlatinumShortswordStab, ItemID.PlatinumShortsword }
         };
 
         private Dictionary<short, float> Projectile_MinValuesAI = new Dictionary<short, float> {

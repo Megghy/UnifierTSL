@@ -867,19 +867,7 @@ namespace TShockAPI
                         (Bouncer.projectileCreatesLiquid.ContainsKey(projectile.type) || Bouncer.projectileCreatesTile.ContainsKey(projectile.type))) {
                         var player = Players[projectile.owner];
                         if (player != null) {
-                            lock (player.RecentlyCreatedProjectiles) {
-                                if (player.RecentlyCreatedProjectiles.Any(p => p.Key == projectile.key && p.Killed)) {
-                                    player.RecentlyCreatedProjectiles.RemoveAll(p => p.Key == projectile.key && p.Killed);
-                                }
-
-                                if (!player.RecentlyCreatedProjectiles.Any(p => p.Key == projectile.key)) {
-                                    player.RecentlyCreatedProjectiles.Add(new ProjectileStruct() {
-                                        Key = projectile.key,
-                                        Type = (short)projectile.type,
-                                        CreatedAt = DateTime.Now
-                                    });
-                                }
-                            }
+                            player.TrackRecentProjectile(projectile.key, (short)projectile.type, replaceKilled: true);
                         }
                     }
                 }

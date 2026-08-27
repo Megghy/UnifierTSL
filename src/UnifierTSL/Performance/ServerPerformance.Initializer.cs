@@ -90,10 +90,10 @@ namespace UnifierTSL.Performance
                         server.Console.WriteLine(Main.statusText);
                     }
 
-                    var anyConnections = server.hasRoutedConnections;
-                    if (anyConnections)
+                    // 空服也要推进帧环，否则 console TPS/util 没有采样数据。
+                    DetailedFPS.StartNextFrame();
+                    if (server.hasRoutedConnections)
                     {
-                        DetailedFPS.StartNextFrame();
                         try
                         {
                             mainInstance.Update(server, gameTime);
@@ -105,15 +105,11 @@ namespace UnifierTSL.Performance
                     }
 
                     var frameElapsedMs = frameTimer.Elapsed.TotalMilliseconds - nowMs;
-                    if (anyConnections)
-                    {
-                        var budgetedSleepMs = Math.Max(0d, nextFrameAtMs - frameTimer.Elapsed.TotalMilliseconds);
-                        ref var currentFrameData = ref data.CurrentFrameData;
-                        currentFrameData.SetBudget(
-                            Math.Max(0d, nowMs - scheduledFrameAtMs),
-                            idealFrameTimeMs,
-                            budgetedSleepMs);
-                    }
+                    var budgetedSleepMs = Math.Max(0d, nextFrameAtMs - frameTimer.Elapsed.TotalMilliseconds);
+                    data.CurrentFrameData.SetBudget(
+                        Math.Max(0d, nowMs - scheduledFrameAtMs),
+                        idealFrameTimeMs,
+                        budgetedSleepMs);
 
                     if (frameElapsedMs <= 0d)
                         Thread.Sleep(0);

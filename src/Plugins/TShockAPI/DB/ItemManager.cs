@@ -6,7 +6,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Terraria.ID;
 using TShockAPI.Hooks;
+using TShockAPI.Localization;
 
 namespace TShockAPI.DB
 {
@@ -23,6 +25,8 @@ namespace TShockAPI.DB
         }
         readonly Func<DataConnection> _dbFactory;
         public List<ItemBan> ItemBans = [];
+        Dictionary<string, ItemBan> _byName = new(StringComparer.Ordinal);
+        Dictionary<int, ItemBan> _byType = [];
 
         public ItemManager(DataConnection db) {
             _dbFactory = DataConnectionFactory.FromPrototype(db);
@@ -51,6 +55,7 @@ namespace TShockAPI.DB
             catch (Exception ex) {
                 TShock.Log.Error(ex.ToString());
             }
+            RebuildLookups();
         }
 
         public void AddNewBan(string itemname = "") {
@@ -67,6 +72,7 @@ namespace TShockAPI.DB
 
                 if (!ItemIsBanned(itemname, null))
                     ItemBans.Add(new ItemBan(itemname));
+                RebuildLookups();
             }
             catch (Exception ex) {
                 TShock.Log.Error(ex.ToString());
@@ -82,6 +88,7 @@ namespace TShockAPI.DB
                 var itemBansTable = db.GetTable<ItemBansTable>();
                 itemBansTable.Where(b => b.Name == itemname).Delete();
                 ItemBans.Remove(new ItemBan(itemname));
+                RebuildLookups();
             }
             catch (Exception ex) {
                 TShock.Log.Error(ex.ToString());
@@ -139,21 +146,47 @@ namespace TShockAPI.DB
             return false;
         }
 
-        public bool ItemIsBanned(string name) => ItemBans.Contains(new(name));
+        public bool ItemIsBanned(string name) => _byName.ContainsKey(name);
+
+        public bool ItemIsBanned(int type, TSPlayer? ply)
+            => _byType.TryGetValue(type, out var ban) && !ban.HasPermissionToUseItem(ply);
 
         public bool ItemIsBanned(string? name, TSPlayer? ply) {
             if (name is null) return false;
-            var b = GetItemBanByName(name);
-            return b != null && !b.HasPermissionToUseItem(ply);
+            return _byName.TryGetValue(name, out var ban) && !ban.HasPermissionToUseItem(ply);
         }
 
-        public ItemBan? GetItemBanByName(string name) {
-            for (int i = 0; i < ItemBans.Count; i++) {
-                if (ItemBans[i].Name == name) {
-                    return ItemBans[i];
-                }
+        public ItemBan? GetItemBanByName(string name)
+            => _byName.TryGetValue(name, out var ban) ? ban : null;
+
+        internal static void FillLookups(
+            List<ItemBan> bans,
+            Dictionary<string, ItemBan> byName,
+            Dictionary<int, ItemBan> byType,
+            Func<int, string?> getName,
+            int itemCount)
+        {
+            byName.Clear();
+            byType.Clear();
+            for (int i = 0; i < bans.Count; i++)
+                byName[bans[i].Name] = bans[i];
+            if (byName.Count == 0)
+                return;
+            for (int id = 1; id < itemCount; id++)
+            {
+                var name = getName(id);
+                if (name is not null && byName.TryGetValue(name, out var ban))
+                    byType[id] = ban;
             }
-            return null;
+        }
+
+        void RebuildLookups()
+        {
+            var byName = new Dictionary<string, ItemBan>(ItemBans.Count, StringComparer.Ordinal);
+            var byType = new Dictionary<int, ItemBan>();
+            FillLookups(ItemBans, byName, byType, EnglishLanguage.GetItemNameById, ItemID.Count);
+            _byName = byName;
+            _byType = byType;
         }
     }
     public class ItemBan : IEquatable<ItemBan>

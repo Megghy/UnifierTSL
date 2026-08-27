@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using UnifierTSL.Contracts.Display;
 using UnifierTSL.Contracts.Projection;
 using UnifierTSL.Contracts.Sessions;
@@ -7,7 +6,7 @@ using UnifierTSL.Terminal.Runtime;
 
 namespace UnifierTSL.Terminal.Shell
 {
-    public sealed partial class ConsoleShell : IDisposable
+    public sealed class ConsoleShell : IDisposable
     {
         private readonly object sync = new();
         private readonly LineEditorSession lineEditorSession = new();
@@ -17,19 +16,15 @@ namespace UnifierTSL.Terminal.Shell
         private readonly TerminalTuiAdapter tuiAdapter = new();
         private readonly TimeProvider timeProvider;
         private readonly ITimer footerAnimationTimer;
-        private readonly int caretBlinkMs;
 
         private bool disposed;
         private bool interactionFrameActive;
         private bool readInProgress;
-        private bool nativeBlinkSuppressed;
         private int statusScrollOffset;
         private bool hasOutputCursor;
         private bool outputLineContinuation;
         private int outputCursorLeft;
         private int outputCursorTop;
-        private bool virtualCaretVisible = true;
-        private long caretBlinkAnchorTimestamp;
         private long footerAnimationTick;
         private int lastViewportWidth = -1;
         private int lastWrapWidth = -1;
@@ -55,10 +50,7 @@ namespace UnifierTSL.Terminal.Shell
             this.timeProvider = timeProvider;
             terminalCapabilities = terminalDevice.Capabilities;
             renderer = new TerminalRenderer(terminalDevice);
-            caretBlinkMs = GetCaretBlinkMs();
-            long nowTimestamp = timeProvider.GetTimestamp();
-            caretBlinkAnchorTimestamp = nowTimestamp;
-            lastViewportChangeTimestamp = nowTimestamp;
+            lastViewportChangeTimestamp = timeProvider.GetTimestamp();
             footerAnimationTimer = timeProvider.CreateTimer(
                 static state => ((ConsoleShell)state!).TickFooterAnimation(),
                 this,
@@ -243,7 +235,6 @@ namespace UnifierTSL.Terminal.Shell
             lock (sync) {
                 ThrowIfDisposed();
                 readInProgress = true;
-                SetBlinkSuppressedLocked(true);
                 BeginInteractionFrameLocked(frame);
                 pendingInputState = CaptureInputStateChangedLocked(onInputStateChanged);
             }
@@ -275,10 +266,6 @@ namespace UnifierTSL.Terminal.Shell
                         }
 
                         if (captureRawKey) {
-                            ResetCaretBlinkLocked();
-                        }
-
-                        if (captureRawKey) {
                             continue;
                         }
 
@@ -290,14 +277,12 @@ namespace UnifierTSL.Terminal.Shell
 
                             case EditorActionKind.Redraw:
                             case EditorActionKind.Autocomplete:
-                                ResetCaretBlinkLocked();
                                 pendingInputState = CaptureInputStateChangedLocked(onInputStateChanged);
                                 redrawPending = true;
                                 break;
 
                             case EditorActionKind.ScrollStatus:
                                 UpdateStatusScroll(action.Delta);
-                                ResetCaretBlinkLocked();
                                 DrawFooter();
                                 break;
 
@@ -334,7 +319,6 @@ namespace UnifierTSL.Terminal.Shell
                         }
 
                         lock (sync) {
-                            ResetCaretBlinkLocked();
                             DrawFooter();
                         }
                     }
@@ -353,8 +337,6 @@ namespace UnifierTSL.Terminal.Shell
                     if (interactionFrameActive) {
                         EndInteractionFrameLocked();
                     }
-
-                    SetBlinkSuppressedLocked(false);
                 }
             }
         }
@@ -368,7 +350,6 @@ namespace UnifierTSL.Terminal.Shell
 
             lock (sync) {
                 ThrowIfDisposed();
-                SetBlinkSuppressedLocked(true);
                 BeginInteractionFrameLocked(frame);
             }
 
@@ -383,8 +364,6 @@ namespace UnifierTSL.Terminal.Shell
                     if (interactionFrameActive) {
                         EndInteractionFrameLocked();
                     }
-
-                    SetBlinkSuppressedLocked(false);
                 }
             }
         }
@@ -467,7 +446,6 @@ namespace UnifierTSL.Terminal.Shell
                 disposed = true;
                 interactionFrameActive = false;
                 readInProgress = false;
-                SetBlinkSuppressedLocked(false);
                 renderer.Reset();
                 disposeTimer = true;
             }
@@ -580,10 +558,11 @@ namespace UnifierTSL.Terminal.Shell
             int? normalizedAnchor = anchorTopRow is int requestedAnchor
                 ? ClampRow(requestedAnchor)
                 : null;
+            bool showInputRow = ShouldRenderInputRowLocked();
             renderer.Draw(
                 renderScene,
-                ShouldRenderInputRowLocked(),
-                readInProgress && currentFrame.InteractionMode == TerminalSurfaceInteractionMode.Editor && virtualCaretVisible,
+                showInputRow,
+                showInputRow,
                 SupportsVirtualTerminal,
                 normalizedAnchor);
 
@@ -698,7 +677,6 @@ namespace UnifierTSL.Terminal.Shell
                 }
 
                 long animationTick = footerAnimationTick;
-                long nowTick = timeProvider.GetTimestamp();
                 bool shouldRedraw = !renderer.FooterDrawn && hasFooterTarget;
                 if (renderer.FooterDrawn && renderer.RequiresViewportRefresh()) {
                     shouldRedraw = true;
@@ -709,12 +687,6 @@ namespace UnifierTSL.Terminal.Shell
                 }
 
                 if (inputIndicator is not null && RefreshRenderedAnimationLocked(inputIndicator, animationTick)) {
-                    shouldRedraw = true;
-                }
-
-                if (readInProgress
-                    && currentFrame.InteractionMode == TerminalSurfaceInteractionMode.Editor
-                    && RefreshVirtualCaretLocked(nowTick)) {
                     shouldRedraw = true;
                 }
 
@@ -731,7 +703,6 @@ namespace UnifierTSL.Terminal.Shell
             currentFrame = frame;
             statusScrollOffset = 0;
             UpdateInputIndicatorLocked(currentFrame);
-            ResetCaretBlinkLocked();
             lineEditorSession.BeginSession(currentFrame);
             lineEditorSession.RefreshPreviewPreference();
             DrawFooter();
@@ -754,30 +725,6 @@ namespace UnifierTSL.Terminal.Shell
 
         private bool ShouldRenderInputRowLocked() {
             return interactionFrameActive && currentFrame.InteractionMode == TerminalSurfaceInteractionMode.Editor;
-        }
-
-        private bool RefreshVirtualCaretLocked(long nowTick) {
-            bool visible = ResolveVirtualCaretVisible(nowTick);
-            if (visible == virtualCaretVisible) {
-                return false;
-            }
-
-            virtualCaretVisible = visible;
-            return true;
-        }
-
-        private bool ResolveVirtualCaretVisible(long nowTick) {
-            if (caretBlinkMs <= 0) {
-                return true;
-            }
-
-            long step = (long)(timeProvider.GetElapsedTime(caretBlinkAnchorTimestamp, nowTick).TotalMilliseconds / caretBlinkMs);
-            return (step & 1) == 0;
-        }
-
-        private void ResetCaretBlinkLocked() {
-            caretBlinkAnchorTimestamp = timeProvider.GetTimestamp();
-            virtualCaretVisible = true;
         }
 
         private void UpdateInputIndicatorLocked(TerminalSurfaceRuntimeFrame frame) {
@@ -971,43 +918,5 @@ namespace UnifierTSL.Terminal.Shell
             char lastChar = normalized[^1];
             return lastChar == '\n' || lastChar == '\r';
         }
-
-        private void SetBlinkSuppressedLocked(bool suppress) {
-            if (!IsInteractive || !SupportsVirtualTerminal || nativeBlinkSuppressed == suppress) {
-                return;
-            }
-
-            try {
-                terminalDevice.Write(suppress ? "\u001b[?12l" : "\u001b[?12h");
-                nativeBlinkSuppressed = suppress;
-            }
-            catch {
-            }
-        }
-
-        private static int GetCaretBlinkMs() {
-            if (!OperatingSystem.IsWindows()) {
-                return 530;
-            }
-
-            try {
-                uint blinkInterval = GetCaretBlinkTime();
-                if (blinkInterval == uint.MaxValue) {
-                    return 0;
-                }
-
-                if (blinkInterval == 0) {
-                    return 530;
-                }
-
-                return (int)Math.Min(blinkInterval, int.MaxValue);
-            }
-            catch {
-                return 530;
-            }
-        }
-
-        [LibraryImport("user32.dll")]
-        private static partial uint GetCaretBlinkTime();
     }
 }

@@ -50,12 +50,10 @@ namespace UnifierTSL.Performance
                 bool includeCurrentFrame = false;
                 long latestTimestamp = 0;
 
-                if (ShouldIncludeCurrentFrame(detailedFps)) {
-                    long currentTimestamp = Stopwatch.GetTimestamp();
-                    if (TryGetFrameBounds(currentFrameData, currentTimestamp, out _, out _)) {
-                        includeCurrentFrame = true;
-                        latestTimestamp = currentTimestamp;
-                    }
+                long currentTimestamp = Stopwatch.GetTimestamp();
+                if (TryGetFrameBounds(currentFrameData, currentTimestamp, out _, out _)) {
+                    includeCurrentFrame = true;
+                    latestTimestamp = currentTimestamp;
                 }
 
                 if (!includeCurrentFrame && !TryGetLatestCompletedFrameTimestamp(server, detailedFps, out latestTimestamp)) {
@@ -243,9 +241,6 @@ namespace UnifierTSL.Performance
 
             private static bool HasFrameEvents(DetailedFPS.Frame frame)
                 => frame.events is { Count: > 0 };
-
-            private static bool ShouldIncludeCurrentFrame(DetailedFPSSystemContext detailedFps)
-                => !detailedFps.root.Main.dedServ || detailedFps.root.Netplay.HasFullyConnectedClients;
 
             private static void AccumulateFrameWindow(
                 ServerPerformance.FrameData frameData,

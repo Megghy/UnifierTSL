@@ -18,7 +18,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 using Terraria.ID;
 using TShockAPI.DB;
 using Terraria;
-using TShockAPI.Localization;
 using LinqToDB.Data;
 using UnifierTSL;
 using UnifierTSL.Events.Core;
@@ -80,14 +79,17 @@ namespace TShockAPI
                 // Untaint now, re-taint if they fail the check.
                 UnTaint(player);
 
+                if (DataModel.ItemBans.Count == 0)
+                    continue;
+
                 // If player isn't disabled for not being logged in, check for any banned items in use.
                 if (((setting.RequireLogin || server.Main.ServerSideCharacter) && player.IsLoggedIn) ||
                     (!setting.RequireLogin && !server.Main.ServerSideCharacter))
                 {
-                    // No matter the player type, we do a check when a player is holding an item that's banned.
-                    if (DataModel.ItemIsBanned(EnglishLanguage.GetItemNameById(player.TPlayer.inventory[player.TPlayer.selectedItem].type), player))
+                    var held = player.TPlayer.inventory[player.TPlayer.selectedItem];
+                    if (DataModel.ItemIsBanned(held.type, player))
                     {
-                        string itemName = player.TPlayer.inventory[player.TPlayer.selectedItem].Name;
+                        string itemName = held.Name;
                         player.Disable(GetString($"holding banned item: {itemName}"), disableFlags);
                         SendCorrectiveMessage(player, itemName);
                     }
@@ -99,7 +101,7 @@ namespace TShockAPI
                     for (int i = 0; i < player.TPlayer.armor.Length; i++)
                     {
                         Item item = player.TPlayer.GetEffectiveArmor(server, i);
-                        if (DataModel.ItemIsBanned(EnglishLanguage.GetItemNameById(item.type), player))
+                        if (DataModel.ItemIsBanned(item.type, player))
                         {
                             Taint(player);
                             SendCorrectiveMessage(player, item.Name);
@@ -110,7 +112,7 @@ namespace TShockAPI
                     for (int i = 0; i < player.TPlayer.dye.Length; i++)
                     {
                         Item item = player.TPlayer.GetEffectiveDye(i);
-                        if (DataModel.ItemIsBanned(EnglishLanguage.GetItemNameById(item.type), player))
+                        if (DataModel.ItemIsBanned(item.type, player))
                         {
                             Taint(player);
                             SendCorrectiveMessage(player, item.Name);
@@ -120,7 +122,7 @@ namespace TShockAPI
                     // Misc equip ban checks
                     foreach (Item item in player.TPlayer.miscEquips)
                     {
-                        if (DataModel.ItemIsBanned(EnglishLanguage.GetItemNameById(item.type), player))
+                        if (DataModel.ItemIsBanned(item.type, player))
                         {
                             Taint(player);
                             SendCorrectiveMessage(player, item.Name);
@@ -130,7 +132,7 @@ namespace TShockAPI
                     // Misc dye ban checks
                     foreach (Item item in player.TPlayer.miscDyes)
                     {
-                        if (DataModel.ItemIsBanned(EnglishLanguage.GetItemNameById(item.type), player))
+                        if (DataModel.ItemIsBanned(item.type, player))
                         {
                             Taint(player);
                             SendCorrectiveMessage(player, item.Name);
@@ -146,28 +148,32 @@ namespace TShockAPI
         }
 
         private void OnPlayerUpdate(ref ReceivePacketEvent<PlayerControls> args) {
+            if (DataModel.ItemBans.Count == 0)
+                return;
+
             var player = TShock.Players[args.ReceiveFrom.ID];
+            var selected = player.TPlayer.inventory[args.Packet.SelectedItem];
+            if (!DataModel.ItemIsBanned(selected.type, player))
+                return;
+
             var server = args.LocalReceiver.Server;
             var disableFlags = player.GetCurrentSettings().DisableSecondUpdateLogs ? DisableFlags.WriteToConsole : DisableFlags.WriteToLogAndConsole;
+            string itemName = selected.Name;
+            player.TPlayer.controlUseItem = false;
+            args.Packet.PlayerControlData.IsUsingItem = false;
+            player.Disable(GetString($"holding banned item: {itemName}"), disableFlags);
 
-            string itemName = player.TPlayer.inventory[args.Packet.SelectedItem].Name;
+            SendCorrectiveMessage(player, itemName);
 
-            if (DataModel.ItemIsBanned(EnglishLanguage.GetItemNameById(player.TPlayer.inventory[args.Packet.SelectedItem].type), player)) {
-                player.TPlayer.controlUseItem = false;
-                args.Packet.PlayerControlData.IsUsingItem = false;
-                player.Disable(GetString($"holding banned item: {itemName}"), disableFlags);
-
-                SendCorrectiveMessage(player, itemName);
-
-                player.TPlayer.Update(server, player.TPlayer.whoAmI);
-                args.StopPropagation = true;
-                args.HandleMode = PacketHandleMode.Overwrite;
-                return;
-            }
-            return;
+            player.TPlayer.Update(server, player.TPlayer.whoAmI);
+            args.StopPropagation = true;
+            args.HandleMode = PacketHandleMode.Overwrite;
         }
 
         private void OnChestItemChange(ref ReceivePacketEvent<SyncChestItem> args) {
+            if (DataModel.ItemBans.Count == 0)
+                return;
+
             var player = TShock.Players[args.ReceiveFrom.ID];
             var server = args.LocalReceiver.Server;
 
@@ -175,7 +181,7 @@ namespace TShockAPI
             item.netDefaults(server, args.Packet.ItemType);
 
 
-            if (DataModel.ItemIsBanned(EnglishLanguage.GetItemNameById(item.type), player)) {
+            if (DataModel.ItemIsBanned(item.type, player)) {
                 SendCorrectiveMessage(player, item.Name);
                 args.HandleMode = PacketHandleMode.Cancel;
                 args.StopPropagation = true;
@@ -184,6 +190,9 @@ namespace TShockAPI
         }
 
         private void OnTileEdit(ref ReceivePacketEvent<TileChange> args) {
+            if (DataModel.ItemBans.Count == 0)
+                return;
+
             var action = args.Packet.ChangeType;
 
             if (action == TileEditAction.PlaceTile || action == TileEditAction.PlaceWall) {
@@ -195,7 +204,7 @@ namespace TShockAPI
                     return;
                 }
 
-                if (DataModel.ItemIsBanned(EnglishLanguage.GetItemNameById(player.SelectedItem.type), player)) {
+                if (DataModel.ItemIsBanned(player.SelectedItem.type, player)) {
                     player.SendTileSquareCentered(args.Packet.Position.X, args.Packet.Position.Y, 4);
                     args.HandleMode = PacketHandleMode.Cancel;
                     return;

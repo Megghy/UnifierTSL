@@ -1,5 +1,5 @@
+using System.Text;
 using UnifierTSL.Surface.Activities;
-using System.Text.Json;
 using UnifierTSL.Contracts.Display;
 using UnifierTSL.Contracts.Projection;
 using UnifierTSL.Servers;
@@ -16,6 +16,7 @@ namespace UnifierTSL.Surface.Status
     internal sealed class StatusProjectionRuntime : IDisposable
     {
         public const int RefreshIntervalMs = 250;
+        public const int IdleRefreshIntervalMs = 5000;
 
         private readonly ServerContext? server;
         private readonly Action<long, ProjectionDocument> sink;
@@ -27,6 +28,7 @@ namespace UnifierTSL.Surface.Status
         private int selectedActivityIndex = -1;
         private string lastSignature = "<unset>";
         private long nextSequence;
+        private long lastPeriodicComposeTimestamp;
         private int disposed;
 
         public StatusProjectionRuntime(
@@ -38,7 +40,7 @@ namespace UnifierTSL.Surface.Status
             this.sink = sink;
             this.shouldPublish = shouldPublish ?? (() => true);
             timer = new Timer(
-                static state => ((StatusProjectionRuntime)state!).PublishCurrent(forcePublish: false),
+                static state => ((StatusProjectionRuntime)state!).PublishCurrent(forcePublish: false, throttleIdle: true),
                 this,
                 RefreshIntervalMs,
                 RefreshIntervalMs);
@@ -153,6 +155,8 @@ namespace UnifierTSL.Surface.Status
             lock (stateSync) {
                 lastSignature = "<unset>";
             }
+
+            lastPeriodicComposeTimestamp = 0;
         }
 
         public void Dispose() {
@@ -183,7 +187,7 @@ namespace UnifierTSL.Surface.Status
             }
         }
 
-        private void PublishCurrent(bool forcePublish) {
+        private void PublishCurrent(bool forcePublish, bool throttleIdle = false) {
             long sequence;
             ProjectionDocument document;
             lock (publishSync) {
@@ -191,17 +195,32 @@ namespace UnifierTSL.Surface.Status
                     return;
                 }
 
+                if (throttleIdle && !forcePublish && ShouldThrottleIdlePublish()) {
+                    return;
+                }
+
                 if (forcePublish) {
                     document = ComposeCurrentDocument();
                 }
                 else if (!TryGetCurrentDocumentIfChanged(out document)) {
+                    lastPeriodicComposeTimestamp = Environment.TickCount64;
                     return;
                 }
 
                 sequence = Interlocked.Increment(ref nextSequence);
+                lastPeriodicComposeTimestamp = Environment.TickCount64;
             }
 
             sink(sequence, document);
+        }
+
+        private bool ShouldThrottleIdlePublish() {
+            if (HasActiveActivity) {
+                return false;
+            }
+
+            long last = lastPeriodicComposeTimestamp;
+            return last != 0 && Environment.TickCount64 - last < IdleRefreshIntervalMs;
         }
 
         private ProjectionDocument ComposeCurrentDocument() {
@@ -212,7 +231,7 @@ namespace UnifierTSL.Surface.Status
 
         private bool TryGetCurrentDocumentIfChanged(out ProjectionDocument document) {
             document = ComposeCurrentDocument();
-            var signature = JsonSerializer.Serialize(document);
+            var signature = ComputeVisibleSignature(document);
             lock (stateSync) {
                 if (Volatile.Read(ref disposed) != 0
                     || string.Equals(signature, lastSignature, StringComparison.Ordinal)) {
@@ -221,6 +240,53 @@ namespace UnifierTSL.Surface.Status
 
                 lastSignature = signature;
                 return true;
+            }
+        }
+
+        private static string ComputeVisibleSignature(ProjectionDocument document) {
+            var builder = new StringBuilder();
+            builder.Append(document.Scope.Kind)
+                .Append('\u001f')
+                .Append(document.Scope.ScopeId)
+                .Append('\u001f')
+                .Append(document.Scope.DocumentKind)
+                .Append('\u001f')
+                .Append(ProjectionStyleDictionaryOps.BuildSignature(document.State.Styles))
+                .Append('\n');
+
+            foreach (var node in document.State.Nodes) {
+                builder.Append(node.NodeId).Append('\u001f').Append((byte)node.Kind).Append(':');
+                switch (node) {
+                    case TextProjectionNodeState text:
+                        AppendBlock(builder, text.State.Content);
+                        break;
+                    case DetailProjectionNodeState detail:
+                        AppendBlock(builder, detail.State.Heading);
+                        builder.Append('|');
+                        AppendBlock(builder, detail.State.Summary);
+                        foreach (var line in detail.State.Lines) {
+                            builder.Append('|');
+                            AppendBlock(builder, line);
+                        }
+                        break;
+                    case ContainerProjectionNodeState container:
+                        builder.Append(container.State.IsVisible);
+                        break;
+                }
+
+                builder.Append('\n');
+            }
+
+            return builder.ToString();
+        }
+
+        private static void AppendBlock(StringBuilder builder, ProjectionTextBlock block) {
+            foreach (var line in block.Lines) {
+                foreach (var span in line.Spans) {
+                    builder.Append(span.Text);
+                }
+
+                builder.Append('\n');
             }
         }
 

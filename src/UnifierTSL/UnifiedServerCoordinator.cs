@@ -337,6 +337,18 @@ namespace UnifierTSL
         }
 
         public static Player GetPlayer(int clientIndex) => players[clientIndex];
+
+        public static void VisitCoordinatorPlayers(Action<Player> visit)
+        {
+            for (int i = 0; i < pendingConnects.Length; i++)
+                visit(pendingConnects[i].player);
+            for (int i = 0; i < players.Length; i++)
+            {
+                var player = players[i];
+                if (player != null)
+                    visit(player);
+            }
+        }
         //{
         //    var server = GetClientCurrentlyServer(clientIndex);
         //    return server is null ? pendingConnects[clientIndex].player : players[clientIndex];
@@ -345,6 +357,7 @@ namespace UnifierTSL
         private static readonly UdpClient broadcastClient;
 
         public static event Action? Started;
+        public static event Action<Player>? IdlePlayerSlotReleased;
 
         public static IPEndPoint ListeningEndpoint => listenerController.ListeningEndpoint;
 
@@ -649,6 +662,7 @@ namespace UnifierTSL
 
                                 bool active = server.Main.player[i].active;
                                 server.Main.player[i].active = false;
+                                IdlePlayerSlotReleased?.Invoke(server.Main.player[i]);
                                 if (active) {
                                     server.Player.Hooks.PlayerDisconnect(i);
                                 }

@@ -15,13 +15,7 @@ namespace UnifierTSL.Surface.Status
         private static readonly TimeSpan LauncherBandwidthWindow = TimeSpan.FromSeconds(1);
         private static readonly TimeSpan LauncherBandwidthRetention = TimeSpan.FromSeconds(2);
         private static readonly ConcurrentQueue<LauncherNetworkSample> LauncherNetworkSamples = new();
-        private static readonly StyledTextLine[] BreathIndicatorFrames = [
-            BuildIndicatorFrame("[◉]"),
-            BuildIndicatorFrame("[◎]"),
-            BuildIndicatorFrame("[◉]"),
-            BuildIndicatorFrame("[○]"),
-        ];
-        private const int BreathIndicatorFrameStepTicks = 15;
+        private static readonly StyledTextLine IdleIndicatorLine = BuildIndicatorFrame("[◉]");
 
         private readonly record struct LauncherNetworkSample(
             DateTimeOffset TimestampUtc,
@@ -51,9 +45,7 @@ namespace UnifierTSL.Surface.Status
                 nodes: [
                     StatusProjectionDocumentFactory.CreateTextNode(
                         SessionStatusSchema.IndicatorNodeId,
-                        animation: StatusProjectionDocumentFactory.CreateAnimation(
-                            BreathIndicatorFrameStepTicks,
-                            BreathIndicatorFrames)),
+                        content: StatusProjectionDocumentFactory.ToBlock(IdleIndicatorLine)),
                     StatusProjectionDocumentFactory.CreateTextNode(
                         SessionStatusSchema.TitleNodeId,
                         StatusProjectionDocumentFactory.CreateTitleBlock()),
