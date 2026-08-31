@@ -11,6 +11,7 @@ using Terraria.UI.Chat;
 using TrProtocol.NetPackets.Modules;
 using UnifiedServerProcess;
 using UnifierTSL.Surface.Hosting;
+using UnifierTSL.Surface.Hosting.Server;
 using UnifierTSL.Surface.Prompting;
 using UnifierTSL.Terminal;
 using UnifierTSL.Events.Core;
@@ -83,7 +84,23 @@ namespace UnifierTSL.Events.Handlers
             On.Terraria.Chat.Commands.SayChatCommand.ProcessIncomingMessage += ProcessIncomingMessage;
             On.Terraria.Chat.ChatCommandProcessor.ProcessIncomingMessage += ProcessIncomingMessage;
             On.OTAPI.HooksSystemContext.MainSystemContext.InvokeCommandProcess_string += ProcessConsoleMessage;
+            On.Terraria.MainSystemContext.startDedInputCallBack += HandleDedicatedInput;
             IL.Terraria.MainSystemContext.mfwh_startDedInputCallBack += ILHook_startDedInputCallBack;
+        }
+
+        internal static bool IsExpectedDedicatedInputShutdown(ObjectDisposedException exception) =>
+            exception.ObjectName == nameof(ServerConsoleReadScope);
+
+        private static void HandleDedicatedInput(
+            On.Terraria.MainSystemContext.orig_startDedInputCallBack orig,
+            Terraria.MainSystemContext self) {
+            try {
+                orig(self);
+            }
+            catch (ObjectDisposedException exception) when (
+                IsExpectedDedicatedInputShutdown(exception) && self.root.Netplay.Disconnect) {
+                // 服务器关闭时，输入线程可能晚于游戏主线程结束；控制台释放属于正常退出路径。
+            }
         }
 
         private void ILHook_startDedInputCallBack(ILContext il) {

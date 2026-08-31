@@ -140,7 +140,7 @@ namespace TShockAPI.Commanding.V2
                     CommandSystem.GetOutcomeWriter<CommandExecutor>().Write(context.Executor, result.Outcome ?? CommandOutcome.Empty);
                 }
                 else if (Commands.RequiresLegacyDispatch(context.Executor, result.ExecutionRequest?.InvokedRoot)) {
-                    Commands.HandleCommand(context.Executor, nestedCommand);
+                    Commands.HandleCommand(context.Executor, result.ExecutionRequest?.RawInput ?? nestedCommand);
                 }
                 else {
                     CommandSystem.GetOutcomeWriter<CommandExecutor>().Write(

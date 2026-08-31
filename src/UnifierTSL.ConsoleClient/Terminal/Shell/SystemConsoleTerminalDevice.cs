@@ -6,6 +6,8 @@ namespace UnifierTSL.Terminal.Shell {
 
         public TerminalCapabilities Capabilities => capabilities;
 
+        public bool IsSelectionActive => TerminalCapabilities.IsConsoleSelectionActive();
+
         public TerminalViewport Viewport {
             get {
                 bool hasWindowWidth = TryGetWindowWidth(out int windowWidth);

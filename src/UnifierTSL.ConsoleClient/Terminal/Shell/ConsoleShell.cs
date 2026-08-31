@@ -16,6 +16,7 @@ namespace UnifierTSL.Terminal.Shell
         private readonly TerminalTuiAdapter tuiAdapter = new();
         private readonly TimeProvider timeProvider;
         private readonly ITimer footerAnimationTimer;
+        private readonly Queue<(string Text, bool IsAnsi)> deferredLogWrites = [];
 
         private bool disposed;
         private bool interactionFrameActive;
@@ -23,6 +24,7 @@ namespace UnifierTSL.Terminal.Shell
         private int statusScrollOffset;
         private bool hasOutputCursor;
         private bool outputLineContinuation;
+        private bool deferredFooterDraw;
         private int outputCursorLeft;
         private int outputCursorTop;
         private long footerAnimationTick;
@@ -78,39 +80,49 @@ namespace UnifierTSL.Terminal.Shell
 
             lock (sync) {
                 ThrowIfDisposed();
+                if (terminalDevice.IsSelectionActive) {
+                    deferredLogWrites.Enqueue((text, isAnsi));
+                    deferredFooterDraw = true;
+                    return;
+                }
 
-                if (IsInteractive && renderer.FooterDrawn) {
-                    renderer.ClearFooterArea(SupportsVirtualTerminal);
-                    if (hasOutputCursor) {
-                        int clearedTop = ClampRow(terminalDevice.Cursor.Top);
-                        if (!outputLineContinuation) {
+                AppendLogLocked(text, isAnsi);
+            }
+        }
+
+        private void AppendLogLocked(string text, bool isAnsi) {
+
+            if (IsInteractive && renderer.FooterDrawn) {
+                renderer.ClearFooterArea(SupportsVirtualTerminal);
+                if (hasOutputCursor) {
+                    int clearedTop = ClampRow(terminalDevice.Cursor.Top);
+                    if (!outputLineContinuation) {
                             // When previous output ended with a line terminator, the next write should
                             // always restart from the cleared footer top row at column 0. This prevents
                             // stale cached anchors from drifting into old footer rows.
                             outputCursorTop = clearedTop;
                             outputCursorLeft = 0;
-                        }
-                        else if (outputCursorTop > clearedTop) {
+                    }
+                    else if (outputCursorTop > clearedTop) {
                             // Footer reservation near buffer bottom can trigger an implicit scroll.
                             // Keep output anchor at/above the cleared row to avoid downward jumps
                             // and phantom blank lines.
                             outputCursorTop = clearedTop;
-                        }
                     }
                 }
+            }
 
-                if (IsInteractive) {
-                    EnsureOutputCursor();
-                    ClearFreshOutputRow();
-                }
+            if (IsInteractive) {
+                EnsureOutputCursor();
+                ClearFreshOutputRow();
+            }
 
-                string output = WriteText(text, isAnsi);
-                CaptureOutputCursor(output);
+            string output = WriteText(text, isAnsi);
+            CaptureOutputCursor(output);
 
-                if (IsInteractive && HasFooterTargetLocked()) {
-                    int? anchorTopRow = hasOutputCursor ? ResolveFooterAnchorRow() : null;
-                    DrawFooter(anchorTopRow);
-                }
+            if (IsInteractive && HasFooterTargetLocked()) {
+                int? anchorTopRow = hasOutputCursor ? ResolveFooterAnchorRow() : null;
+                DrawFooter(anchorTopRow);
             }
         }
 
@@ -541,6 +553,17 @@ namespace UnifierTSL.Terminal.Shell
         }
 
         private void DrawFooter(int? anchorTopRow = null) {
+            if (terminalDevice.IsSelectionActive) {
+                deferredFooterDraw = true;
+                return;
+            }
+
+            deferredFooterDraw = false;
+
+            while (deferredLogWrites.TryDequeue(out var deferred)) {
+                AppendLogLocked(deferred.Text, deferred.IsAnsi);
+            }
+
             if (ShouldDelayFooterLocked()) {
                 return;
             }
@@ -677,7 +700,7 @@ namespace UnifierTSL.Terminal.Shell
                 }
 
                 long animationTick = footerAnimationTick;
-                bool shouldRedraw = !renderer.FooterDrawn && hasFooterTarget;
+                bool shouldRedraw = deferredFooterDraw || !renderer.FooterDrawn && hasFooterTarget;
                 if (renderer.FooterDrawn && renderer.RequiresViewportRefresh()) {
                     shouldRedraw = true;
                 }

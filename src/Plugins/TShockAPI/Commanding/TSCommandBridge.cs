@@ -242,7 +242,7 @@ namespace TShockAPI.Commanding
 
             if (!result.Matched) {
                 if (Commands.RequiresLegacyDispatch(executor, result.ExecutionRequest?.InvokedRoot)) {
-                    Commands.HandleCommand(executor, request.RawInput);
+                    Commands.HandleCommand(executor, result.ExecutionRequest?.RawInput ?? request.RawInput);
                     return result with { Handled = true };
                 }
 

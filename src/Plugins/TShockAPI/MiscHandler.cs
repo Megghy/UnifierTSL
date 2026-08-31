@@ -661,7 +661,7 @@ namespace TShockAPI
                         CommandSystem.GetOutcomeWriter<CommandExecutor>().Write(executor, result.Outcome ?? CommandOutcome.Empty);
                     }
                     else if (Commands.RequiresLegacyDispatch(executor, result.ExecutionRequest?.InvokedRoot)) {
-                        if (!Commands.HandleCommand(executor, text)) {
+                        if (!Commands.HandleCommand(executor, result.ExecutionRequest?.RawInput ?? text)) {
                             if (executor.IsClient) {
                                 executor.Player.SendErrorMessage(GetString("Unable to parse command. Please contact an administrator for assistance."));
                             }

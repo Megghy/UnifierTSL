@@ -10,6 +10,8 @@ using TShockAPI.Commanding;
 using TShockAPI.DB;
 using TShockAPI.Hooks;
 using UnifierTSL;
+using UnifierTSL.Commanding;
+using UnifierTSL.Commanding.Composition;
 using UnifierTSL.Servers;
 
 namespace TShockAPI
@@ -155,6 +157,41 @@ namespace TShockAPI
 
                 UnregisterLegacyCommands(commands);
             }
+        }
+
+        /// <summary>
+        /// 按真实聊天链路派发指令: 先走 V2 注册表, 未命中再回落到旧版 <see cref="ChatCommands"/>。
+        /// 插件需要代玩家执行指令时必须用这个入口, 直接查 <see cref="ChatCommands"/> 找不到任何内置指令。
+        /// </summary>
+        /// <returns>指令是否被某个注册表处理</returns>
+        public static bool Dispatch(CommandExecutor executor, string text) {
+            ArgumentNullException.ThrowIfNull(executor);
+            if (string.IsNullOrWhiteSpace(text)) {
+                return false;
+            }
+
+            var endpointId = TSCommandBridge.ResolveEndpointId(executor);
+            var request = TSCommandBridge.CreateDispatchRequest(
+                executor,
+                endpointId,
+                text,
+                TSCommandBridge.IsSilentInvocation(text));
+            var result = CommandDispatchCoordinator.DispatchAsync(request)
+                .GetAwaiter()
+                .GetResult();
+
+            if (result.Matched) {
+                TSCommandBridge.AuditDispatch(executor, request, result);
+                CommandSystem.GetOutcomeWriter<CommandExecutor>().Write(executor, result.Outcome ?? CommandOutcome.Empty);
+                return true;
+            }
+
+            if (RequiresLegacyDispatch(executor, result.ExecutionRequest?.InvokedRoot)) {
+                return HandleCommand(executor, result.ExecutionRequest?.RawInput ?? text);
+            }
+
+            executor.SendErrorMessage(GetString("Invalid command entered. Type {0}help for a list of valid commands.", Specifier));
+            return false;
         }
 
         public static bool HandleCommand(CommandExecutor executor, string text) {

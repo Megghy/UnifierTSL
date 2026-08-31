@@ -103,6 +103,11 @@ namespace UnifierTSL.Performance
                             server.Log.Warning("", ex: ex);
                         }
                     }
+                    else
+                    {
+                        // 空服时跳过 Main.Update，但 Web/后台任务仍可能在 Dispatcher 排队。
+                        server.Dispatcher.DrainPending();
+                    }
 
                     var frameElapsedMs = frameTimer.Elapsed.TotalMilliseconds - nowMs;
                     var budgetedSleepMs = Math.Max(0d, nextFrameAtMs - frameTimer.Elapsed.TotalMilliseconds);

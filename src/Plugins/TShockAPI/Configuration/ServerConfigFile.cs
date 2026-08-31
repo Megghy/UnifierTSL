@@ -18,6 +18,9 @@ namespace TShockAPI.Configuration
 
         public TSettings GlobalSettings => defaultSetting;
 
+        /// <summary>全局配置文件绝对路径（不含 per-server override）。</summary>
+        public string FilePath => defaultSettingHandle.FilePath;
+
         public TSettings GetServerSettings(string serverName) {
             if (cachedServerSettings.TryGetValue(serverName, out TSettings? value)) {
                 return value;
@@ -38,6 +41,21 @@ namespace TShockAPI.Configuration
         }
 
         public event Action<ServerConfigFile<TSettings>>? OnConfigRead;
+
+        /// <summary>
+        /// 覆盖全局配置并落盘。handle.Overwrite 不会触发 OnChangedAsync，所以这里自己同步缓存并通知订阅者。
+        /// </summary>
+        public void Overwrite(TSettings settings) {
+            defaultSettingHandle.Overwrite(settings);
+            ApplyLoaded(settings);
+        }
+
+        /// <summary>从磁盘重新加载全局配置，重建 per-server 缓存，并通知订阅者。</summary>
+        public void Reload() {
+            defaultSettingHandle.Reload();
+            ApplyLoaded(defaultSettingHandle.Request()
+                ?? throw new InvalidOperationException($"Unable to load default settings for {FilePath}"));
+        }
 
         public ServerConfigFile(IPluginConfigRegistrar configRegistrar, string fileNameWithoutExtension) {
 
@@ -83,16 +101,14 @@ namespace TShockAPI.Configuration
                 return new ValueTask<bool>(true);
             }
 
-            defaultSetting = config;
-            try {
-                cachedServerSettings = BuildServerSettings(serverSpecificSettingHandle.Request(), defaultSetting);
-            }
-            catch {
-                return new ValueTask<bool>(true);
-            }
-
-            OnConfigRead?.Invoke(this);
+            ApplyLoaded(config);
             return new ValueTask<bool>(false);
+        }
+
+        private void ApplyLoaded(TSettings settings) {
+            defaultSetting = settings;
+            cachedServerSettings = BuildServerSettings(serverSpecificSettingHandle.Request(), defaultSetting);
+            OnConfigRead?.Invoke(this);
         }
 
         private static ImmutableDictionary<string, TSettings> BuildServerSettings(

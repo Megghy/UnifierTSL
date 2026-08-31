@@ -214,6 +214,10 @@ namespace UnifierTSL.Terminal.Shell
         }
 
         public void ClearFooterArea(bool supportsVirtualTerminal = false) {
+            if (terminalDevice.IsSelectionActive) {
+                return;
+            }
+
             FooterLayout layout = ResolveCurrentFooterLayout();
             if (!layout.IsValid) {
                 return;

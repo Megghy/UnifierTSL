@@ -71,7 +71,7 @@ namespace UnifierTSL.Surface.Status
         private static StyledTextLine ComposeServerMonitor(ServerContext server, StatusProjectionSettings consoleStatus) {
             var perfData = ServerPerformance.Queries.GetSnapshot(server, TimeSpan.FromSeconds(1));
             var ups = perfData.TicksPerSecond;
-            var util = perfData.LoopUtilization;
+            var util = perfData.BusyUtilization;
             var upKBps = perfData.SentBytesCount / 1000d;
             var downKBps = perfData.ReceivedBytesCount / 1000d;
             var online = server.ActivePlayerCount;

@@ -4,6 +4,8 @@ namespace UnifierTSL.Terminal.Shell {
     public sealed class TerminalCapabilities {
         private const int StdOutputHandle = -11;
         private const uint EnableVirtualTerminalProcessing = 0x0004;
+        private const uint ConsoleSelectionInProgress = 0x0001;
+        private const uint ConsoleSelectionNotEmpty = 0x0002;
 
         public bool IsInteractive { get; }
 
@@ -46,6 +48,20 @@ namespace UnifierTSL.Terminal.Shell {
             }
 
             return new TerminalCapabilities(interactive, supportsVt, inputRedirected, outputRedirected);
+        }
+
+        internal static bool IsConsoleSelectionActive() {
+            if (!OperatingSystem.IsWindows()) {
+                return false;
+            }
+
+            try {
+                return GetConsoleSelectionInfo(out var info)
+                    && (info.Flags & (ConsoleSelectionInProgress | ConsoleSelectionNotEmpty)) != 0;
+            }
+            catch {
+                return false;
+            }
         }
 
         private static bool CanMoveCursor() {
@@ -91,5 +107,29 @@ namespace UnifierTSL.Terminal.Shell {
 
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetConsoleSelectionInfo(out ConsoleSelectionInfo selectionInfo);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ConsoleSelectionInfo {
+            public uint Flags;
+            private Coord SelectionAnchor;
+            private SmallRect Selection;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Coord {
+            public short X;
+            public short Y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SmallRect {
+            public short Left;
+            public short Top;
+            public short Right;
+            public short Bottom;
+        }
     }
 }

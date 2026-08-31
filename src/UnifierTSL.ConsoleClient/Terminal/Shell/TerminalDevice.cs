@@ -4,6 +4,8 @@ namespace UnifierTSL.Terminal.Shell {
     internal interface ITerminalDevice {
         TerminalCapabilities Capabilities { get; }
 
+        bool IsSelectionActive { get; }
+
         TerminalViewport Viewport { get; }
 
         TerminalCursor Cursor { get; }

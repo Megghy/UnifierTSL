@@ -14,6 +14,12 @@ namespace UnifierTSL.Servers
 
         public abstract bool CheckAccess();
 
+        /// <summary>
+        /// 在服务器更新线程上执行已排队的回调。空服时主循环可能跳过
+        /// <c>Main.Update</c>，宿主仍需调用此方法处理 Web 等后台请求。
+        /// </summary>
+        public virtual void DrainPending() { }
+
         public abstract void Post(Action action);
 
         public abstract Task InvokeAsync(Action action, CancellationToken cancellationToken = default);
@@ -201,10 +207,10 @@ namespace UnifierTSL.Servers
                 return;
             }
 
-            DrainQueue();
+            DrainPending();
         }
 
-        private void DrainQueue() {
+        public override void DrainPending() {
             while (queue.TryDequeue(out Action? action)) {
                 try {
                     ExecuteWithDispatchContext(action);
