@@ -330,21 +330,7 @@ namespace TShockAPI
             var tr = new TSRestPlayer(args.TokenData.Username, restPlayerGroup, targetServer);
             CommandExecutor executor = CommandExecutor.ForRest(tr, targetServer);
             var normalizedInput = TSCommandBridge.EnsureCommandPrefix(commandText);
-            var request = TSCommandBridge.CreateDispatchRequest(
-                executor,
-                TShockCommandEndpoints.Rest,
-                normalizedInput,
-                TSCommandBridge.IsSilentInvocation(normalizedInput));
-            var result = CommandDispatchCoordinator.DispatchAsync(request)
-                .GetAwaiter()
-                .GetResult();
-            if (result.Matched) {
-                TSCommandBridge.AuditDispatch(executor, request, result);
-                CommandSystem.GetOutcomeWriter<CommandExecutor>().Write(executor, result.Outcome ?? CommandOutcome.Empty);
-            }
-            else {
-                CommandSystem.GetOutcomeWriter<CommandExecutor>().Write(executor, CommandOutcome.Error(GetString("Invalid command entered. Type {0}help for a list of valid commands.", Commands.Specifier)));
-            }
+            Commands.Dispatch(executor, normalizedInput);
             return new RestObject()
             {
                 {"response", tr.GetCommandOutput()}

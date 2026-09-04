@@ -38,7 +38,7 @@ namespace TShockAPI
             List<string> args) {
             Message = message;
             Executor = executor;
-            Player = executor.InGamePlayer;
+            Player = executor.Player;
             ExecutorActor = executor.Player;
             Parameters = args;
             Silent = false;
@@ -51,7 +51,7 @@ namespace TShockAPI
             List<string> args) {
             Message = message;
             Executor = sender;
-            Player = sender.InGamePlayer;
+            Player = sender.Player;
             ExecutorActor = sender.Player;
             Parameters = args;
             Silent = silent;

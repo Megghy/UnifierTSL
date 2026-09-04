@@ -81,13 +81,13 @@ namespace TShockAPI
             [CallerMemberName] string? member = null,
             [CallerLineNumber] int line = 0) {
 
+            if (RestPlayer is not null) {
+                RestPlayer.SendMessage(message, color);
+                return;
+            }
+
             if (SourceServer is null) {
-                if (RestPlayer is not null) {
-                    RestPlayer.SendMessage(message, color);
-                }
-                else {
-                    CurrentLogger.Info(message, file: file, member: member, line: line);
-                }
+                CurrentLogger.Info(message, file: file, member: member, line: line);
             }
             else {
                 if (UserId == byte.MaxValue) {
@@ -103,13 +103,13 @@ namespace TShockAPI
             [CallerMemberName] string? member = null,
             [CallerLineNumber] int line = 0) {
 
+            if (RestPlayer is not null) {
+                RestPlayer.SendMessage(message, new Color(r, g, b));
+                return;
+            }
+
             if (SourceServer is null) {
-                if (RestPlayer is not null) {
-                    RestPlayer.SendMessage(message, new Color(r, g, b));
-                }
-                else {
-                    CurrentLogger.Info(message, file: file, member: member, line: line);
-                }
+                CurrentLogger.Info(message, file: file, member: member, line: line);
             }
             else {
                 if (UserId == byte.MaxValue) {
@@ -125,13 +125,13 @@ namespace TShockAPI
             [CallerMemberName] string? member = null,
             [CallerLineNumber] int line = 0) {
 
+            if (RestPlayer is not null) {
+                RestPlayer.SendErrorMessage(message);
+                return;
+            }
+
             if (SourceServer is null) {
-                if (RestPlayer is not null) {
-                    RestPlayer.SendErrorMessage(message);
-                }
-                else {
-                    CurrentLogger.Error(message, file: file, member: member, line: line);
-                }
+                CurrentLogger.Error(message, file: file, member: member, line: line);
             }
             else {
                 if (UserId == byte.MaxValue) {
@@ -147,14 +147,13 @@ namespace TShockAPI
             [CallerMemberName] string? member = null,
             [CallerLineNumber] int line = 0) {
 
+            if (RestPlayer is not null) {
+                RestPlayer.SendInfoMessage(message);
+                return;
+            }
 
             if (SourceServer is null) {
-                if (RestPlayer is not null) {
-                    RestPlayer.SendInfoMessage(message);
-                }
-                else {
-                    CurrentLogger.Info(message, file: file, member: member, line: line);
-                }
+                CurrentLogger.Info(message, file: file, member: member, line: line);
             }
             else {
                 if (UserId == byte.MaxValue) {
@@ -170,14 +169,13 @@ namespace TShockAPI
             [CallerMemberName] string? member = null,
             [CallerLineNumber] int line = 0) {
 
+            if (RestPlayer is not null) {
+                RestPlayer.SendWarningMessage(message);
+                return;
+            }
 
             if (SourceServer is null) {
-                if (RestPlayer is not null) {
-                    RestPlayer.SendWarningMessage(message);
-                }
-                else {
-                    CurrentLogger.Warning(message, file: file, member: member, line: line);
-                }
+                CurrentLogger.Warning(message, file: file, member: member, line: line);
             }
             else {
                 if (UserId == byte.MaxValue) {
@@ -193,13 +191,13 @@ namespace TShockAPI
             [CallerMemberName] string? member = null,
             [CallerLineNumber] int line = 0) {
 
+            if (RestPlayer is not null) {
+                RestPlayer.SendSuccessMessage(message);
+                return;
+            }
+
             if (SourceServer is null) {
-                if (RestPlayer is not null) {
-                    RestPlayer.SendSuccessMessage(message);
-                }
-                else {
-                    CurrentLogger.Success(message, file: file, member: member, line: line);
-                }
+                CurrentLogger.Success(message, file: file, member: member, line: line);
             }
             else {
                 if (UserId == byte.MaxValue) {
