@@ -205,7 +205,7 @@ namespace TShockAPI.Commanding.V2
             }
 
             itemAmount = NormalizeItemAmount(item, itemAmount);
-            if (!player.GiveItemCheck(item.type, EnglishLanguage.GetItemNameById(item.type), itemAmount, prefixId)) {
+            if (!player.GiveItemCheck(item.type, EnglishLanguage.GetItemNameById(item.type) ?? item.Name, itemAmount, prefixId)) {
                 return CommandOutcome.Error(GetString("You cannot spawn banned items."));
             }
 
@@ -226,7 +226,7 @@ namespace TShockAPI.Commanding.V2
             }
 
             itemAmount = NormalizeItemAmount(item, itemAmount);
-            if (!target.GiveItemCheck(item.type, EnglishLanguage.GetItemNameById(item.type), itemAmount, prefixId)) {
+            if (!target.GiveItemCheck(item.type, EnglishLanguage.GetItemNameById(item.type) ?? item.Name, itemAmount, prefixId)) {
                 return CommandOutcome.Error(GetString("You cannot spawn banned items."));
             }
 

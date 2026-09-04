@@ -695,20 +695,18 @@ namespace TShockAPI
             //if (OnDoorUse(tsPlayer, args.Data, x, y, direction, doorAction))
             //    { args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true; return; }
 
-            ushort tileType = server.Main.tile[x, y].type;
-
             if (x >= server.Main.maxTilesX || y >= server.Main.maxTilesY || x < 0 || y < 0) // Check for out of range
             {
                 server.Log.Debug(GetString("GetDataHandlers / HandleDoorUse rejected out of range door {0}", tsPlayer.Name));
                 { args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true; return; }
             }
 
-            if (Enum.IsDefined(doorAction)) {
+            if (!Enum.IsDefined(doorAction)) {
                 server.Log.Debug(GetString("GetDataHandlers / HandleDoorUse rejected type 0 5 check {0}", tsPlayer.Name));
                 { args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true; return; }
             }
 
-
+            ushort tileType = server.Main.tile[x, y].type;
             if (tileType != TileID.ClosedDoor && tileType != TileID.OpenDoor
                                               && tileType != TileID.TallGateClosed && tileType != TileID.TallGateOpen
                                               && tileType != TileID.TrapdoorClosed && tileType != TileID.TrapdoorOpen) {

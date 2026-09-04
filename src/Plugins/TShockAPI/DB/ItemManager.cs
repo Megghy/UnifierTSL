@@ -146,7 +146,7 @@ namespace TShockAPI.DB
             return false;
         }
 
-        public bool ItemIsBanned(string name) => _byName.ContainsKey(name);
+        public bool ItemIsBanned(string? name) => name is not null && _byName.ContainsKey(name);
 
         public bool ItemIsBanned(int type, TSPlayer? ply)
             => _byType.TryGetValue(type, out var ban) && !ban.HasPermissionToUseItem(ply);
@@ -156,8 +156,8 @@ namespace TShockAPI.DB
             return _byName.TryGetValue(name, out var ban) && !ban.HasPermissionToUseItem(ply);
         }
 
-        public ItemBan? GetItemBanByName(string name)
-            => _byName.TryGetValue(name, out var ban) ? ban : null;
+        public ItemBan? GetItemBanByName(string? name)
+            => name is not null && _byName.TryGetValue(name, out var ban) ? ban : null;
 
         internal static void FillLookups(
             List<ItemBan> bans,

@@ -34,7 +34,7 @@ namespace TShockAPI.DB
             public required string Private { get; set; }
         }
         readonly Func<DataConnection> _dbFactory;
-        internal readonly List<Warp> Warps = [];
+        public readonly List<Warp> Warps = [];
         public WarpManager(DataConnection db) {
             _dbFactory = DataConnectionFactory.FromPrototype(db);
 

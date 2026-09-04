@@ -1706,9 +1706,11 @@ namespace TShockAPI
         /// <param name="stack">The item stack.</param>
         /// <param name="prefix">The item prefix.</param>
         /// <returns>True or false, depending if the item passed the check or not.</returns>
-        public bool GiveItemCheck(int type, string name, int stack, int prefix = 0) {
-            if ((TShock.ItemBans.DataModel.ItemIsBanned(name) && GetCurrentSettings().PreventBannedItemSpawn) &&
-                (TShock.ItemBans.DataModel.ItemIsBanned(name, this) || !GetCurrentSettings().AllowAllowedGroupsToSpawnBannedItems))
+        public bool GiveItemCheck(int type, string? name, int stack, int prefix = 0) {
+            name ??= Localization.EnglishLanguage.GetItemNameById(type) ?? Lang.GetItemNameValue(type);
+            var isBanned = TShock.ItemBans.DataModel.ItemIsBanned(type, this) || (name is not null && TShock.ItemBans.DataModel.ItemIsBanned(name));
+            if (isBanned && GetCurrentSettings().PreventBannedItemSpawn &&
+                (TShock.ItemBans.DataModel.ItemIsBanned(type, this) || (name is not null && TShock.ItemBans.DataModel.ItemIsBanned(name, this)) || !GetCurrentSettings().AllowAllowedGroupsToSpawnBannedItems))
                 return false;
 
             GiveItem(type, stack, prefix);
