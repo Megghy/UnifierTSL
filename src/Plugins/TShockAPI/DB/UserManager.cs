@@ -296,10 +296,16 @@ namespace TShockAPI.DB
             throw new UserAccountNotExistException(account.Name);
         }
 
-        public List<UserAccount> GetUserAccounts() {
+        public List<UserAccount> GetUserAccounts(int offset = 0, int limit = 0) {
             try {
                 using var db = _dbFactory();
-                return [.. db.GetTable<UserTable>()
+                var query = db.GetTable<UserTable>().AsQueryable();
+                if (offset > 0)
+                    query = query.Skip(offset);
+                if (limit > 0)
+                    query = query.Take(limit);
+
+                return [.. query
                     .Select(u => new UserAccount {
                         ID = u.ID,
                         Group = u.Usergroup,

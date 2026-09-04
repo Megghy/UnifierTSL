@@ -35,7 +35,7 @@ namespace TShockAPI
             Account = new UserAccount { Name = AccountName };
         }
         public sealed override ServerContext GetCurrentServer() {
-            throw new NotImplementedException();
+            return UnifiedServerCoordinator.GetDefaultServer()!;
         }
         public override void SendErrorMessage(string msg) {
             SendConsoleMessage(msg, 255, 0, 0);

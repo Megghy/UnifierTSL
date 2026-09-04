@@ -223,7 +223,7 @@ namespace UnifierTSL
         }
 
         private static void ConfigureDurableLogging(LogPersistenceMode requestedMode) {
-            EnsureDurableProcessExitHook();
+            EnsureCrashAndExitHooks();
             DisposeDurableWriter(reportTimeout: false);
 
             if (requestedMode == LogPersistenceMode.None) {
@@ -254,16 +254,71 @@ namespace UnifierTSL
             }
         }
 
-        private static void EnsureDurableProcessExitHook() {
+        internal static void EnsureCrashAndExitHooks() {
             if (Interlocked.Exchange(ref durableProcessExitHookRegistered, 1) != 0) {
                 return;
             }
 
             AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
+            AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
+            TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         }
 
         private static void OnProcessExit(object? sender, EventArgs e) {
             DisposeDurableWriter(reportTimeout: true);
+        }
+
+        private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs e) {
+            var ex = e.ExceptionObject as Exception;
+            var isTerminating = e.IsTerminating;
+            var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+            var crashHeader = $"[CRASH] Fatal unhandled exception encountered (IsTerminating={isTerminating}, Time={timestamp}):";
+            var details = ex?.ToString() ?? e.ExceptionObject?.ToString() ?? "Unknown exception";
+            var fullMessage = $"{crashHeader}\n{details}";
+
+            // 1. 控制台直接显式输出红色崩溃堆栈
+            try {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.Error.WriteLine(fullMessage);
+                Console.ResetColor();
+            }
+            catch { }
+
+            // 2. 崩溃日志同步紧急落盘（独立 crash.log 和 latest-crash.log）
+            try {
+                var baseDir = AppContext.BaseDirectory;
+                var logsDir = Path.Combine(baseDir, "logs");
+                Directory.CreateDirectory(logsDir);
+                var crashText = $"[{timestamp}] {fullMessage}\n" + new string('-', 80) + "\n";
+                File.AppendAllText(Path.Combine(logsDir, "crash.log"), crashText);
+                File.AppendAllText(Path.Combine(logsDir, "latest-crash.log"), crashText);
+            }
+            catch { }
+
+            // 3. 记入核心持久化日志并强制同步刷盘
+            try {
+                Logger.Critical(fullMessage, ex: ex, category: "Crash");
+            }
+            catch { }
+
+            try {
+                lock (durableWriterGate) {
+                    durableWriter?.FlushSync();
+                }
+            }
+            catch { }
+
+            DisposeDurableWriter(reportTimeout: false);
+        }
+
+        private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e) {
+            try {
+                Logger.Error($"[UnobservedTaskException] {e.Exception}", ex: e.Exception, category: "TaskException");
+                lock (durableWriterGate) {
+                    durableWriter?.FlushSync();
+                }
+            }
+            catch { }
         }
 
         private static void DisposeDurableWriter(bool reportTimeout) {

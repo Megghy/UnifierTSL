@@ -308,6 +308,21 @@ namespace UnifierTSL
 
         private static ImmutableArray<ServerContext> servers = [];
         public static ImmutableArray<ServerContext> Servers => servers;
+        public static Func<ServerContext?>? DefaultServerProvider { get; set; }
+
+        public static ServerContext? GetDefaultServer() {
+            try {
+                var custom = DefaultServerProvider?.Invoke();
+                if (custom is not null)
+                    return custom;
+            }
+            catch { }
+
+            var list = servers;
+            return list.FirstOrDefault(s => s.IsRunning && (string.Equals(s.Name, "Boss", StringComparison.OrdinalIgnoreCase) || string.Equals(s.Name, "Main", StringComparison.OrdinalIgnoreCase)))
+                ?? list.FirstOrDefault(static s => s.IsRunning)
+                ?? list.FirstOrDefault();
+        }
         public static void AddServer(ServerContext server) {
             if (ImmutableInterlocked.Update(ref servers, arr => arr.Contains(server) ? arr : arr.Add(server))) {
                 UnifierApi.EventHub.Server.AddServer.Invoke(new(server));

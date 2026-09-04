@@ -19,9 +19,25 @@ namespace TShockAPI
         public bool RealPlayer {
             get { return Index >= 0 && Index < Main.maxPlayers && TPlayer != null; }
         }
-        public virtual ServerContext GetCurrentServer() => UnifiedServerCoordinator.GetClientCurrentlyServer(Index)!;
+        public virtual ServerContext GetCurrentServer() {
+            if (Index >= 0 && Index < UnifiedServerCoordinator.globalClients.Length) {
+                var server = UnifiedServerCoordinator.GetClientCurrentlyServer(Index);
+                if (server is not null)
+                    return server;
+            }
+            return UnifiedServerCoordinator.GetDefaultServer()!;
+        }
         public RemoteClient Client => UnifiedServerCoordinator.globalClients[Index];
-        public TShockSettings GetCurrentSettings() => TShock.Config.GetServerSettings(GetCurrentServer().Name);
+        public TShockSettings GetCurrentSettings() {
+            var config = TShock.Config;
+            if (config is null)
+                return new TShockSettings();
+
+            var server = GetCurrentServer();
+            return server is not null
+                ? config.GetServerSettings(server.Name)
+                : config.GetServerSettings(string.Empty);
+        }
         public LocalClientSender MsgSender => UnifiedServerCoordinator.clientSenders[Index];
     }
 }

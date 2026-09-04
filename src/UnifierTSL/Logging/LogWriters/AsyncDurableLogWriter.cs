@@ -17,6 +17,7 @@ namespace UnifierTSL.Logging.LogWriters
         private readonly CancellationTokenSource stoppingCts = new();
         private readonly Task consumerTask;
         private readonly Lock disposeGate = new();
+        private readonly Lock sinkGate = new();
 
         private long enqueuedCount;
         private long dequeuedCount;
@@ -89,6 +90,7 @@ namespace UnifierTSL.Logging.LogWriters
                         }
 
                         DrainPendingRecords(batch);
+                        FlushBatch(batch);
                     }
                     else {
                         bool hasTick = await tickTask;
@@ -132,8 +134,10 @@ namespace UnifierTSL.Logging.LogWriters
 
             try {
                 if (Volatile.Read(ref sinkFailed) == 0) {
-                    sink.WriteBatch(CollectionsMarshal.AsSpan(batch));
-                    sink.Flush();
+                    lock (sinkGate) {
+                        sink.WriteBatch(CollectionsMarshal.AsSpan(batch));
+                        sink.Flush();
+                    }
                 }
             }
             catch (Exception ex) {
@@ -150,7 +154,9 @@ namespace UnifierTSL.Logging.LogWriters
             }
 
             try {
-                sink.Flush();
+                lock (sinkGate) {
+                    sink.Flush();
+                }
             }
             catch (Exception ex) {
                 MarkSinkFailure(ex);
@@ -184,6 +190,34 @@ namespace UnifierTSL.Logging.LogWriters
 
             Console.Error.WriteLine(
                 GetParticularString("{0} is exception text", $"[Error][LogCore|DurableQueue] Durable sink disabled after failure: {ex}"));
+        }
+
+        public void FlushSync() {
+            if (Volatile.Read(ref sinkFailed) != 0) {
+                return;
+            }
+
+            try {
+                List<QueuedDurableLogRecord> batch = new();
+                while (queue.Reader.TryRead(out var record)) {
+                    batch.Add(record);
+                    Interlocked.Increment(ref dequeuedCount);
+                }
+
+                if (batch.Count > 0) {
+                    lock (sinkGate) {
+                        sink.WriteBatch(CollectionsMarshal.AsSpan(batch));
+                    }
+                    ReturnBatchResources(batch);
+                }
+
+                lock (sinkGate) {
+                    sink.Flush();
+                }
+            }
+            catch (Exception ex) {
+                MarkSinkFailure(ex);
+            }
         }
 
         public bool TryFlushAndStop(TimeSpan timeout) {

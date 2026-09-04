@@ -1,14 +1,21 @@
 using Microsoft.Xna.Framework;
+using UnifierTSL.Servers;
 
 namespace TShockAPI
 {
     public class TSRestPlayer : TSPlayer
     {
         internal List<string> CommandOutput = new List<string>();
+        private readonly ServerContext? _server;
 
-        public TSRestPlayer(string playerName, Group playerGroup) : base(playerName) {
+        public TSRestPlayer(string playerName, Group playerGroup, ServerContext? server = null) : base(playerName) {
             Group = playerGroup;
+            _server = server;
             AwaitingResponse = new Dictionary<string, Action<object>>();
+        }
+
+        public override ServerContext GetCurrentServer() {
+            return _server ?? base.GetCurrentServer();
         }
 
         public override void SendMessage(string msg, Color color) {

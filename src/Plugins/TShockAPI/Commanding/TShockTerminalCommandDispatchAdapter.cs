@@ -50,6 +50,17 @@ namespace TShockAPI.Commanding
                 TerminalCommandEndpoint.EndpointId,
                 rawInput,
                 silent);
+
+            if (CommandDispatchCoordinator.TryCreateExecutionRequest(request, out var execReq)
+                && Commands.RequiresLegacyDispatch(executor, execReq.InvokedRoot)) {
+                Commands.HandleCommand(executor, execReq.RawInput);
+                return new CommandDispatchResult {
+                    Handled = true,
+                    Matched = true,
+                    ExecutionRequest = execReq
+                };
+            }
+
             using var activityScope = TSCommandBridge.BeginTerminalDispatchActivityScope(request, cancellationToken);
             var dispatchCancellationToken = activityScope.Activity is null
                 ? cancellationToken

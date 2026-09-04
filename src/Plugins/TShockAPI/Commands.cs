@@ -176,6 +176,12 @@ namespace TShockAPI
                 endpointId,
                 text,
                 TSCommandBridge.IsSilentInvocation(text));
+
+            if (CommandDispatchCoordinator.TryCreateExecutionRequest(request, out var execReq)
+                && RequiresLegacyDispatch(executor, execReq.InvokedRoot)) {
+                return HandleCommand(executor, execReq.RawInput);
+            }
+
             var result = CommandDispatchCoordinator.DispatchAsync(request)
                 .GetAwaiter()
                 .GetResult();

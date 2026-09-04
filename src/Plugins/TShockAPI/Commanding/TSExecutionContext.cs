@@ -1,3 +1,4 @@
+using UnifierTSL;
 using UnifierTSL.Surface.Activities;
 using System.Diagnostics.CodeAnalysis;
 using UnifierTSL.Surface.Status;
@@ -17,7 +18,7 @@ namespace TShockAPI.Commanding
             Executor = executor;
             Silent = silent;
             Target = target;
-            Server = executor.SourceServer;
+            Server = executor.SourceServer ?? UnifiedServerCoordinator.GetDefaultServer();
             ExecutionFeedback = new TSExecutionFeedback(activity: null);
         }
 

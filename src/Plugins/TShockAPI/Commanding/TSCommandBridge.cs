@@ -59,6 +59,12 @@ namespace TShockAPI.Commanding
 
             var endpointId = ResolveEndpointId(executor);
             var request = CreateDispatchRequest(executor, endpointId, rawInput, silent);
+
+            if (CommandDispatchCoordinator.TryCreateExecutionRequest(request, out var execReq)
+                && Commands.RequiresLegacyDispatch(executor, execReq.InvokedRoot)) {
+                return Commands.HandleCommand(executor, execReq.RawInput);
+            }
+
             var result = CommandDispatchCoordinator.DispatchAsync(request)
                 .GetAwaiter()
                 .GetResult();

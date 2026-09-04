@@ -17,10 +17,10 @@ namespace TShockAPI
 {
     public readonly record struct CommandExecutor(ServerContext? SourceServer, byte UserId, TSRestPlayer? RestPlayer = null)
     {
-        public static CommandExecutor ForRest(TSRestPlayer restPlayer)
+        public static CommandExecutor ForRest(TSRestPlayer restPlayer, ServerContext? sourceServer = null)
         {
             ArgumentNullException.ThrowIfNull(restPlayer);
-            return new CommandExecutor(null, byte.MaxValue, restPlayer);
+            return new CommandExecutor(sourceServer, byte.MaxValue, restPlayer);
         }
 
         public readonly string Name {

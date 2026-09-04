@@ -309,6 +309,7 @@ namespace TShockAPI
         [RouteAttribute("/v3/server/rawcmd")]
         [Permission(RestPermissions.restrawcommand)]
         [Noun("cmd", true, "The command and arguments to execute.", typeof(String))]
+        [Noun("server", false, "The target server name or id for this command. If omitted, falls back to the default server.", typeof(String))]
         [Token]
         private object ServerCommandV3(RestRequestArgs args)
         {
@@ -318,8 +319,16 @@ namespace TShockAPI
 
             Group restPlayerGroup = TShock.Groups.GetGroupByName(args.TokenData.UserGroupName);
 
-            var tr = new TSRestPlayer(args.TokenData.Username, restPlayerGroup);
-            CommandExecutor executor = CommandExecutor.ForRest(tr);
+            var serverName = args.Parameters["server"];
+            ServerContext? targetServer = null;
+            if (!string.IsNullOrWhiteSpace(serverName)) {
+                targetServer = UnifiedServerCoordinator.Servers.FirstOrDefault(s => s.IsRunning && string.Equals(s.Name, serverName, StringComparison.OrdinalIgnoreCase))
+                    ?? UnifiedServerCoordinator.Servers.FirstOrDefault(s => string.Equals(s.Name, serverName, StringComparison.OrdinalIgnoreCase));
+            }
+            targetServer ??= UnifiedServerCoordinator.GetDefaultServer();
+
+            var tr = new TSRestPlayer(args.TokenData.Username, restPlayerGroup, targetServer);
+            CommandExecutor executor = CommandExecutor.ForRest(tr, targetServer);
             var normalizedInput = TSCommandBridge.EnsureCommandPrefix(commandText);
             var request = TSCommandBridge.CreateDispatchRequest(
                 executor,
@@ -436,16 +445,24 @@ namespace TShockAPI
 
         [Description("Get a list of information about the current TShock server.")]
         [Route("/v2/server/status")]
+        [Noun("server", false, "The server name to query status for. If omitted, falls back to the default server.", typeof(String))]
         [Token]
         private object ServerStatusV2(RestRequestArgs args) {
             var serverName = args.Parameters["server"];
-            if (string.IsNullOrWhiteSpace(serverName))
-                return RestMissingParam("server");
-            var server = UnifiedServerCoordinator.Servers.FirstOrDefault(s => s.IsRunning && s.Name == serverName);
-            if (server == null) {
-                return RestResponse($"Server {serverName} was not found.");
+            ServerContext? server = null;
+            if (!string.IsNullOrWhiteSpace(serverName)) {
+                server = UnifiedServerCoordinator.Servers.FirstOrDefault(s => s.IsRunning && string.Equals(s.Name, serverName, StringComparison.OrdinalIgnoreCase));
+                if (server == null) {
+                    return RestResponse($"Server {serverName} was not found.");
+                }
             }
-            var settings = TShock.Config.GetServerSettings(serverName);
+            else {
+                server = UnifiedServerCoordinator.GetDefaultServer();
+                if (server == null) {
+                    return RestResponse("No running servers available.");
+                }
+            }
+            var settings = TShock.Config.GetServerSettings(server.Name);
             var ret = new RestObject()
             {
                 {"name", server.Name},
@@ -518,17 +535,31 @@ namespace TShockAPI
             return new RestObject() { { "activeusers", string.Join("\t", TShock.Players.Where(p => null != p && null != p.Account && p.Active).Select(p => p.Account.Name)) } };
         }
 
-        [Description("Lists all user accounts in the TShock database.")]
+        [Description("Lists user accounts in the TShock database.")]
         [Route("/v2/users/list")]
         [Permission(RestPermissions.restviewusers)]
+        [Noun("page", false, "Page number (1-based, default 1).", typeof(int))]
+        [Noun("limit", false, "Number of accounts per page (default 50, max 500).", typeof(int))]
         [Token]
         private object UserListV2(RestRequestArgs args)
         {
-            return new RestObject() { { "users", TShock.UserAccounts.GetUserAccounts().Select(p => new Dictionary<string,object>(){
-                {"name", p.Name},
-                {"id", p.ID},
-                {"group", p.Group},
-            }) } };
+            int page = GetInt(args.Parameters["page"], 1);
+            if (page < 1) page = 1;
+            int limit = GetInt(args.Parameters["limit"], 50);
+            if (limit <= 0) limit = 50;
+            if (limit > 500) limit = 500;
+            int offset = (page - 1) * limit;
+
+            var accounts = TShock.UserAccounts.GetUserAccounts(offset, limit);
+            return new RestObject() {
+                { "page", page },
+                { "limit", limit },
+                { "users", accounts.Select(p => new Dictionary<string,object>(){
+                    {"name", p.Name},
+                    {"id", p.ID},
+                    {"group", p.Group},
+                }) }
+            };
         }
 
         [Description("Create a new TShock user account.")]
@@ -1378,6 +1409,11 @@ namespace TShockAPI
         {
             bool ret;
             return bool.TryParse(val, out ret) ? ret : def;
+        }
+
+        private static int GetInt(string? val, int def)
+        {
+            return int.TryParse(val, out int ret) ? ret : def;
         }
 
         private object PlayerFind(EscapedParameterCollection parameters)
