@@ -302,63 +302,9 @@ namespace TShockAPI.DB
                 return false;
             }
 
-            var playerData = player.PlayerData;
-            var character = new Character {
-                AccountId = player.Account.ID,
-                Health = playerData.health,
-                MaxHealth = playerData.maxHealth,
-                Mana = playerData.mana,
-                MaxMana = playerData.maxMana,
-                Inventory = string.Join("~", playerData.inventory),
-                extraSlot = playerData.extraSlot,
-                spawnX = player.TPlayer.SpawnX,
-                spawnY = player.TPlayer.SpawnY,
-                skinVariant = player.TPlayer.skinVariant,
-                hair = player.TPlayer.hair,
-                hairDye = player.TPlayer.hairDye,
-                hairColor = Utils.EncodeColor(player.TPlayer.hairColor),
-                pantsColor = Utils.EncodeColor(player.TPlayer.pantsColor),
-                shirtColor = Utils.EncodeColor(player.TPlayer.shirtColor),
-                underShirtColor = Utils.EncodeColor(player.TPlayer.underShirtColor),
-                shoeColor = Utils.EncodeColor(player.TPlayer.shoeColor),
-                hideVisuals = Utils.EncodeBoolArray(player.TPlayer.hideVisibleAccessory),
-                skinColor = Utils.EncodeColor(player.TPlayer.skinColor),
-                eyeColor = Utils.EncodeColor(player.TPlayer.eyeColor),
-                questsCompleted = player.TPlayer.anglerQuestsFinished,
-                usingBiomeTorches = player.TPlayer.UsingBiomeTorches ? 1 : 0,
-                happyFunTorchTime = player.TPlayer.happyFunTorchTime ? 1 : 0,
-                unlockedBiomeTorches = player.TPlayer.unlockedBiomeTorches ? 1 : 0,
-                currentLoadoutIndex = player.TPlayer.CurrentLoadoutIndex,
-                ateArtisanBread = player.TPlayer.ateArtisanBread ? 1 : 0,
-                usedAegisCrystal = player.TPlayer.usedAegisCrystal ? 1 : 0,
-                usedAegisFruit = player.TPlayer.usedAegisFruit ? 1 : 0,
-                usedArcaneCrystal = player.TPlayer.usedArcaneCrystal ? 1 : 0,
-                usedGalaxyPearl = player.TPlayer.usedGalaxyPearl ? 1 : 0,
-                usedGummyWorm = player.TPlayer.usedGummyWorm ? 1 : 0,
-                usedAmbrosia = player.TPlayer.usedAmbrosia ? 1 : 0,
-                unlockedSuperCart = player.TPlayer.unlockedSuperCart ? 1 : 0,
-                enabledSuperCart = player.TPlayer.enabledSuperCart ? 1 : 0,
-                deathsPVE = playerData.deathsPVE,
-                deathsPVP = playerData.deathsPVP,
-                voiceVariant = player.TPlayer.voiceVariant,
-                voicePitchOffset = player.TPlayer.voicePitchOffset,
-                team = player.TPlayer.team
-            };
-
-            try {
-                using var db = _dbFactory();
-                if (!db.GetTable<Character>().Any(c => c.AccountId == player.Account.ID)) {
-                    db.Insert(character);
-                }
-                else {
-                    db.Update(character);
-                }
-                return true;
-            }
-            catch (Exception ex) {
-                TShock.Log.Error(ex.ToString());
-                return false;
-            }
+            return player.PersistentCharacterSnapshot is { } snapshot
+                ? InsertPlayerDataCore(player, snapshot)
+                : InsertLivePlayerDataCore(player);
         }
 
         public bool RemovePlayer(int userid) {
@@ -385,6 +331,10 @@ namespace TShockAPI.DB
                 return true;
             }
 
+            return InsertPlayerDataCore(player, data);
+        }
+
+        private bool InsertPlayerDataCore(TSPlayer player, PlayerData data) {
             var character = new Character {
                 AccountId = player.Account.ID,
                 Health = data.health,
@@ -427,6 +377,57 @@ namespace TShockAPI.DB
                 team = data.team
             };
 
+            return SaveCharacter(player, character);
+        }
+
+        private bool InsertLivePlayerDataCore(TSPlayer player) {
+            var data = player.PlayerData;
+            var character = new Character {
+                AccountId = player.Account.ID,
+                Health = data.health,
+                MaxHealth = data.maxHealth,
+                Mana = data.mana,
+                MaxMana = data.maxMana,
+                Inventory = string.Join("~", data.inventory),
+                extraSlot = data.extraSlot,
+                spawnX = player.TPlayer.SpawnX,
+                spawnY = player.TPlayer.SpawnY,
+                skinVariant = player.TPlayer.skinVariant,
+                hair = player.TPlayer.hair,
+                hairDye = player.TPlayer.hairDye,
+                hairColor = Utils.EncodeColor(player.TPlayer.hairColor),
+                pantsColor = Utils.EncodeColor(player.TPlayer.pantsColor),
+                shirtColor = Utils.EncodeColor(player.TPlayer.shirtColor),
+                underShirtColor = Utils.EncodeColor(player.TPlayer.underShirtColor),
+                shoeColor = Utils.EncodeColor(player.TPlayer.shoeColor),
+                hideVisuals = Utils.EncodeBoolArray(player.TPlayer.hideVisibleAccessory),
+                skinColor = Utils.EncodeColor(player.TPlayer.skinColor),
+                eyeColor = Utils.EncodeColor(player.TPlayer.eyeColor),
+                questsCompleted = player.TPlayer.anglerQuestsFinished,
+                usingBiomeTorches = player.TPlayer.UsingBiomeTorches ? 1 : 0,
+                happyFunTorchTime = player.TPlayer.happyFunTorchTime ? 1 : 0,
+                unlockedBiomeTorches = player.TPlayer.unlockedBiomeTorches ? 1 : 0,
+                currentLoadoutIndex = player.TPlayer.CurrentLoadoutIndex,
+                ateArtisanBread = player.TPlayer.ateArtisanBread ? 1 : 0,
+                usedAegisCrystal = player.TPlayer.usedAegisCrystal ? 1 : 0,
+                usedAegisFruit = player.TPlayer.usedAegisFruit ? 1 : 0,
+                usedArcaneCrystal = player.TPlayer.usedArcaneCrystal ? 1 : 0,
+                usedGalaxyPearl = player.TPlayer.usedGalaxyPearl ? 1 : 0,
+                usedGummyWorm = player.TPlayer.usedGummyWorm ? 1 : 0,
+                usedAmbrosia = player.TPlayer.usedAmbrosia ? 1 : 0,
+                unlockedSuperCart = player.TPlayer.unlockedSuperCart ? 1 : 0,
+                enabledSuperCart = player.TPlayer.enabledSuperCart ? 1 : 0,
+                deathsPVE = data.deathsPVE,
+                deathsPVP = data.deathsPVP,
+                voiceVariant = player.TPlayer.voiceVariant,
+                voicePitchOffset = player.TPlayer.voicePitchOffset,
+                team = player.TPlayer.team
+            };
+
+            return SaveCharacter(player, character);
+        }
+
+        private bool SaveCharacter(TSPlayer player, Character character) {
             try {
                 using var db = _dbFactory();
                 if (!db.GetTable<Character>().Any(c => c.AccountId == player.Account.ID)) {

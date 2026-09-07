@@ -512,6 +512,12 @@ namespace TShockAPI
         public PlayerData PlayerData;
 
         /// <summary>
+        /// A temporary authoritative SSC record. While set, database saves must
+        /// use this complete record instead of the live character.
+        /// </summary>
+        public PlayerData? PersistentCharacterSnapshot { get; set; }
+
+        /// <summary>
         /// Whether the player needs to specify a password upon connection( either server or user account ).
         /// </summary>
         public bool RequiresPassword;

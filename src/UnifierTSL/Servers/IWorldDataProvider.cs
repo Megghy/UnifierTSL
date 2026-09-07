@@ -8,6 +8,14 @@ namespace UnifierTSL.Servers
         string WorldFileName { get; }
         WorldFileData ApplyMetadata(ServerContext server);
 
+        static MemoryWorldDataProvider CreateInMemory(
+            string worldName,
+            int width,
+            int height,
+            Action<ServerContext>? initialize = null,
+            int gameMode = 2)
+            => new MemoryWorldDataProvider(worldName, width, height, initialize, gameMode);
+
         static IWorldDataProvider GenerateOrLoadExisting(string worldName, int worldSize, int difficulty = 2, int worldEvil = 0, string seed = "")
             => new GenerateOrLoadProvider(worldName, worldSize, difficulty, worldEvil, seed);
         private class GenerateOrLoadProvider(string worldName, int worldSize, int difficulty = 2, int worldEvil = 0, string seed = "") : IWorldDataProvider

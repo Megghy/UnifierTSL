@@ -290,6 +290,28 @@ namespace TShockAPI
 		/// <param name="player"></param>
 		public void RestoreCharacter(TSPlayer player)
 		{
+			try
+			{
+				RestoreCharacterChecked(player);
+			}
+			catch (Exception ex)
+			{
+				TShock.Log.Error(GetString($"SSC restore failed for {player.Name}: {ex.Message}"));
+				player.Kick(GetString("SSC restore failed. Please rejoin."));
+			}
+		}
+
+		/// <summary>
+		/// Applies a character without sending any packets. This is suitable for
+		/// disconnect persistence paths where the client is no longer available.
+		/// </summary>
+		public void ApplyCharacter(TSPlayer player) => RestoreCharacterChecked(player, synchronize: false);
+
+		/// <summary>
+		/// Restores a character and propagates failures to the caller.
+		/// </summary>
+		public void RestoreCharacterChecked(TSPlayer player, bool synchronize = true)
+		{
 			var server = player.GetCurrentServer();
 			var tplayer = player.TPlayer;
 
@@ -301,7 +323,7 @@ namespace TShockAPI
 
 			tplayer.statLife = this.health;
 			tplayer.statLifeMax = this.maxHealth;
-			tplayer.statMana = this.maxMana;
+			tplayer.statMana = this.mana;
 			tplayer.statManaMax = this.maxMana;
 			tplayer.SpawnX = this.spawnX;
 			tplayer.SpawnY = this.spawnY;
@@ -569,6 +591,9 @@ namespace TShockAPI
 				}
 			}
 
+			if (!synchronize)
+				return;
+
 			// Just like in MessageBuffer when the client receives a ContinueConnecting, let's sync the CurrentLoadoutIndex _before_ any of
 			// the items.
 			// This is sent to everyone BUT this player, and then ONLY this player. When using UUID login, it is too soon for the server to
@@ -748,11 +773,6 @@ namespace TShockAPI
 					server.NetManager.SendToClient(response, player.Index);
 				}
 			}
-			}
-			catch (Exception ex)
-			{
-				TShock.Log.Error(GetString($"SSC restore failed for {player.Name}: {ex.Message}"));
-				player.Kick(GetString("SSC restore failed. Please rejoin."));
 			}
 			finally
 			{

@@ -36,6 +36,7 @@ namespace UnifierTSL.Servers
             On.Terraria.NetplaySystemContext.StartServer += StartServer;
             On.Terraria.Main.YouCanSleepNow += CloseServer;
             On.UnifiedServerProcess.RootContext.ctor += OnCreateInstance;
+            InitializeMemoryWorlds();
         }
 
         private static void CloseServer(On.Terraria.Main.orig_YouCanSleepNow orig, Main self, RootContext root) {
