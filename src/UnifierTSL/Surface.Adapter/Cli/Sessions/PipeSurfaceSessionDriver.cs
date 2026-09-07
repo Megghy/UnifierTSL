@@ -90,7 +90,10 @@ namespace UnifierTSL.Surface.Adapter.Cli.Sessions {
         public void PublishSurfaceHostOperation(SurfaceHostOperation operation) {
             SurfaceHostOperationPayload payload;
             lock (stateLock) {
-                ThrowIfDisposed();
+                if (disposed) {
+                    return;
+                }
+
                 rememberedSurfaceHostState.Remember(operation);
                 payload = CreateSurfaceHostOperationPayloadLocked(operation);
             }
@@ -101,7 +104,10 @@ namespace UnifierTSL.Surface.Adapter.Cli.Sessions {
         public void PublishProjectionSnapshot(ProjectionSnapshotPayload snapshot) {
             PreparedSurfacePublication? publication;
             lock (stateLock) {
-                ThrowIfDisposed();
+                if (disposed) {
+                    return;
+                }
+
                 publication = PrepareProjectionPublicationLocked(snapshot);
             }
 
@@ -111,7 +117,10 @@ namespace UnifierTSL.Surface.Adapter.Cli.Sessions {
         public void PublishSurfaceOperation(SurfaceOperation operation) {
             PreparedSurfacePublication? publication;
             lock (stateLock) {
-                ThrowIfDisposed();
+                if (disposed) {
+                    return;
+                }
+
                 publication = PrepareSurfacePublicationLocked(operation);
             }
 

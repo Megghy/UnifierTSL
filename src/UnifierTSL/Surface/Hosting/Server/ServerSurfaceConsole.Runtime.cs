@@ -15,6 +15,7 @@ public abstract partial class ServerSurfaceConsole
     private ServerConsoleReadScope? consoleReadScope;
     private StatusProjectionRuntime? statusRuntime;
     private bool runtimeInitialized;
+    private bool isDisposed;
     private ConsoleColor cachedBackgroundColor = System.Console.BackgroundColor;
     private ConsoleColor cachedForegroundColor = System.Console.ForegroundColor;
     private Encoding cachedInputEncoding = System.Console.InputEncoding;
@@ -117,6 +118,9 @@ public abstract partial class ServerSurfaceConsole
     }
 
     public override void Clear() {
+        if (isDisposed) {
+            return;
+        }
         Session.PublishSurfaceHostOperation(SurfaceHostOperations.Clear());
     }
 
@@ -143,19 +147,26 @@ public abstract partial class ServerSurfaceConsole
     }
 
     public override void Dispose(bool disposing) {
-        if (disposing && runtimeInitialized) {
-            try {
-                StatusRuntime.Dispose();
+        if (disposing) {
+            if (isDisposed) {
+                return;
             }
-            catch {
-            }
+            isDisposed = true;
 
-            SurfaceRuntimeOptions.StatusAppearanceChanged -= HandleConsoleAppearanceChanged;
-            Session.PresentationAttached -= HandlePresentationAttached;
-            Session.ActivitySelectionRequested -= HandleActivitySelectionRequested;
-            Session.InputReceived -= HandleInputPayload;
-            ConsoleReadScope.Dispose();
-            Session.Dispose();
+            if (runtimeInitialized) {
+                try {
+                    StatusRuntime.Dispose();
+                }
+                catch {
+                }
+
+                SurfaceRuntimeOptions.StatusAppearanceChanged -= HandleConsoleAppearanceChanged;
+                Session.PresentationAttached -= HandlePresentationAttached;
+                Session.ActivitySelectionRequested -= HandleActivitySelectionRequested;
+                Session.InputReceived -= HandleInputPayload;
+                ConsoleReadScope.Dispose();
+                Session.Dispose();
+            }
         }
         base.Dispose(disposing);
     }
@@ -266,6 +277,10 @@ public abstract partial class ServerSurfaceConsole
     }
 
     private void PublishTextOutput(StreamPayloadKind kind, string? value, bool wrapCurrentColors) {
+        if (isDisposed) {
+            return;
+        }
+
         if (string.IsNullOrEmpty(value)) {
             if (kind == StreamPayloadKind.AppendLine) {
                 Session.PublishSurfaceOperation(SurfaceOperations.Stream(

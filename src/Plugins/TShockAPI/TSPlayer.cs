@@ -459,293 +459,51 @@ namespace TShockAPI
         /// <param name="shouldWarnPlayer">If the check should send a message to the player with the results of the check.</param>
         /// <returns>True if any stacks don't conform.</returns>
         public bool HasHackedItemStacks(bool shouldWarnPlayer = false) {
-            // Iterates through each inventory location a player has.
-            // This section is sub divided into number ranges for what each range of slots corresponds to.
-            bool check = false;
-
             var server = GetCurrentServer();
+            var template = new Item();
 
-            Item[] inventory = TPlayer.inventory;
-            Item[] armor = TPlayer.armor;
-            Item[] dye = TPlayer.dye;
-            Item[] miscEquips = TPlayer.miscEquips;
-            Item[] miscDyes = TPlayer.miscDyes;
-            Item[] piggy = TPlayer.bank.item;
-            Item[] safe = TPlayer.bank2.item;
-            Item[] forge = TPlayer.bank3.item;
-            Item[] voidVault = TPlayer.bank4.item;
-            Item[] loadout1Armor = TPlayer.Loadouts[0].Armor;
-            Item[] loadout1Dye = TPlayer.Loadouts[0].Dye;
-            Item[] loadout2Armor = TPlayer.Loadouts[1].Armor;
-            Item[] loadout2Dye = TPlayer.Loadouts[1].Dye;
-            Item[] loadout3Armor = TPlayer.Loadouts[2].Armor;
-            Item[] loadout3Dye = TPlayer.Loadouts[2].Dye;
+            return HasHackedStacks(server, template, TPlayer.inventory, "Stack cheat detected. Remove item {0} ({1}) and then rejoin.", true, shouldWarnPlayer)
+                | HasHackedStacks(server, template, TPlayer.armor, "Stack cheat detected. Remove armor {0} ({1}) and then rejoin.", true, shouldWarnPlayer)
+                | HasHackedStacks(server, template, TPlayer.dye, "Stack cheat detected. Remove dye {0} ({1}) and then rejoin.", true, shouldWarnPlayer)
+                | HasHackedStacks(server, template, TPlayer.miscEquips, "Stack cheat detected. Remove item {0} ({1}) and then rejoin.", true, shouldWarnPlayer)
+                | HasHackedStacks(server, template, TPlayer.miscDyes, "Stack cheat detected. Remove item dye {0} ({1}) and then rejoin.", true, shouldWarnPlayer)
+                | HasHackedStacks(server, template, TPlayer.bank.item, "Stack cheat detected. Remove piggy-bank item {0} ({1}) and then rejoin.", true, shouldWarnPlayer)
+                | HasHackedStacks(server, template, TPlayer.bank2.item, "Stack cheat detected. Remove safe item {0} ({1}) and then rejoin.", true, shouldWarnPlayer)
+                | HasHackedStack(server, template, TPlayer.trashItem, "Stack cheat detected. Remove trash item {0} ({1}) and then rejoin.", false, shouldWarnPlayer)
+                | HasHackedStacks(server, template, TPlayer.bank3.item, "Stack cheat detected. Remove Defender's Forge item {0} ({1}) and then rejoin.", true, shouldWarnPlayer)
+                | HasHackedStacks(server, template, TPlayer.bank4.item, "Stack cheat detected. Remove Void Vault item {0} ({1}) and then rejoin.", true, shouldWarnPlayer)
+                | HasHackedStacks(server, template, TPlayer.Loadouts[0].Armor, "Stack cheat detected. Remove Loadout 1 item {0} ({1}) and then rejoin.", true, shouldWarnPlayer)
+                | HasHackedStacks(server, template, TPlayer.Loadouts[0].Dye, "Stack cheat detected. Remove Loadout 1 item {0} ({1}) and then rejoin.", true, shouldWarnPlayer)
+                | HasHackedStacks(server, template, TPlayer.Loadouts[1].Armor, "Stack cheat detected. Remove Loadout 2 item {0} ({1}) and then rejoin.", true, shouldWarnPlayer)
+                | HasHackedStacks(server, template, TPlayer.Loadouts[1].Dye, "Stack cheat detected. Remove Loadout 2 item {0} ({1}) and then rejoin.", true, shouldWarnPlayer)
+                | HasHackedStacks(server, template, TPlayer.Loadouts[2].Armor, "Stack cheat detected. Remove Loadout 3 item {0} ({1}) and then rejoin.", true, shouldWarnPlayer)
+                | HasHackedStacks(server, template, TPlayer.Loadouts[2].Dye, "Stack cheat detected. Remove Loadout 3 item {0} ({1}) and then rejoin.", true, shouldWarnPlayer);
+        }
 
-            Item trash = TPlayer.trashItem;
-            for (int i = 0; i < NetItem.MaxInventory; i++) {
-                if (i < NetItem.InventoryIndex.Item2) {
-                    // From above: this is slots 0-58 in the inventory.
-                    // 0-58
-                    Item item = new Item();
-                    if (inventory[i] != null && inventory[i].type != 0) {
-                        item.netDefaults(server,inventory[i].type);
-                        item.Prefix(server,inventory[i].prefix);
-                        item.AffixName();
-                        if (inventory[i].stack > item.maxStack || inventory[i].stack < 0) {
-                            check = true;
-                            if (shouldWarnPlayer) {
-                                SendErrorMessage(GetString("Stack cheat detected. Remove item {0} ({1}) and then rejoin.", item.Name, inventory[i].stack));
-                            }
-                        }
-                    }
-                }
-                else if (i < NetItem.ArmorIndex.Item2) {
-                    // 59-78
-                    var index = i - NetItem.ArmorIndex.Item1;
-                    Item item = new Item();
-                    if (armor[index] != null && armor[index].type != 0) {
-                        item.netDefaults(server,armor[index].type);
-                        item.Prefix(server,armor[index].prefix);
-                        item.AffixName();
-                        if (armor[index].stack > item.maxStack || armor[index].stack < 0) {
-                            check = true;
-                            if (shouldWarnPlayer) {
-                                SendErrorMessage(GetString("Stack cheat detected. Remove armor {0} ({1}) and then rejoin.", item.Name, armor[index].stack));
-                            }
-                        }
-                    }
-                }
-                else if (i < NetItem.DyeIndex.Item2) {
-                    // 79-88
-                    var index = i - NetItem.DyeIndex.Item1;
-                    Item item = new Item();
-                    if (dye[index] != null && dye[index].type != 0) {
-                        item.netDefaults(server,dye[index].type);
-                        item.Prefix(server,dye[index].prefix);
-                        item.AffixName();
-                        if (dye[index].stack > item.maxStack || dye[index].stack < 0) {
-                            check = true;
-                            if (shouldWarnPlayer) {
-                                SendErrorMessage(GetString("Stack cheat detected. Remove dye {0} ({1}) and then rejoin.", item.Name, dye[index].stack));
-                            }
-                        }
-                    }
-                }
-                else if (i < NetItem.MiscEquipIndex.Item2) {
-                    // 89-93
-                    var index = i - NetItem.MiscEquipIndex.Item1;
-                    Item item = new Item();
-                    if (miscEquips[index] != null && miscEquips[index].type != 0) {
-                        item.netDefaults(server,miscEquips[index].type);
-                        item.Prefix(server,miscEquips[index].prefix);
-                        item.AffixName();
-                        if (miscEquips[index].stack > item.maxStack || miscEquips[index].stack < 0) {
-                            check = true;
-                            if (shouldWarnPlayer) {
-                                SendErrorMessage(GetString("Stack cheat detected. Remove item {0} ({1}) and then rejoin.", item.Name, miscEquips[index].stack));
-                            }
-                        }
-                    }
-                }
-                else if (i < NetItem.MiscDyeIndex.Item2) {
-                    // 93-98
-                    var index = i - NetItem.MiscDyeIndex.Item1;
-                    Item item = new Item();
-                    if (miscDyes[index] != null && miscDyes[index].type != 0) {
-                        item.netDefaults(server,miscDyes[index].type);
-                        item.Prefix(server,miscDyes[index].prefix);
-                        item.AffixName();
-                        if (miscDyes[index].stack > item.maxStack || miscDyes[index].stack < 0) {
-                            check = true;
-                            if (shouldWarnPlayer) {
-                                SendErrorMessage(GetString("Stack cheat detected. Remove item dye {0} ({1}) and then rejoin.", item.Name, miscDyes[index].stack));
-                            }
-                        }
-                    }
-                }
-                else if (i < NetItem.PiggyIndex.Item2) {
-                    // 98-138
-                    var index = i - NetItem.PiggyIndex.Item1;
-                    Item item = new Item();
-                    if (piggy[index] != null && piggy[index].type != 0) {
-                        item.netDefaults(server,piggy[index].type);
-                        item.Prefix(server,piggy[index].prefix);
-                        item.AffixName();
+        private bool HasHackedStacks(ServerContext server, Item template, Item[] stacks, string warning, bool checkNegative, bool shouldWarnPlayer) {
+            bool detected = false;
+            foreach (var stack in stacks) {
+                detected |= HasHackedStack(server, template, stack, warning, checkNegative, shouldWarnPlayer);
+            }
+            return detected;
+        }
 
-                        if (piggy[index].stack > item.maxStack || piggy[index].stack < 0) {
-                            check = true;
-                            if (shouldWarnPlayer) {
-                                SendErrorMessage(GetString("Stack cheat detected. Remove piggy-bank item {0} ({1}) and then rejoin.", item.Name, piggy[index].stack));
-                            }
-                        }
-                    }
-                }
-                else if (i < NetItem.SafeIndex.Item2) {
-                    // 138-178
-                    var index = i - NetItem.SafeIndex.Item1;
-                    Item item = new Item();
-                    if (safe[index] != null && safe[index].type != 0) {
-                        item.netDefaults(server,safe[index].type);
-                        item.Prefix(server,safe[index].prefix);
-                        item.AffixName();
-
-                        if (safe[index].stack > item.maxStack || safe[index].stack < 0) {
-                            check = true;
-                            if (shouldWarnPlayer) {
-                                SendErrorMessage(GetString("Stack cheat detected. Remove safe item {0} ({1}) and then rejoin.", item.Name, safe[index].stack));
-                            }
-                        }
-                    }
-                }
-                else if (i < NetItem.TrashIndex.Item2) {
-                    // 178-179
-                    Item item = new Item();
-                    if (trash != null && trash.type != 0) {
-                        item.netDefaults(server,trash.type);
-                        item.Prefix(server,trash.prefix);
-                        item.AffixName();
-
-                        if (trash.stack > item.maxStack) {
-                            check = true;
-                            if (shouldWarnPlayer) {
-                                SendErrorMessage(GetString("Stack cheat detected. Remove trash item {0} ({1}) and then rejoin.", item.Name, trash.stack));
-                            }
-                        }
-                    }
-                }
-                else if (i < NetItem.ForgeIndex.Item2) {
-                    // 179-220
-                    var index = i - NetItem.ForgeIndex.Item1;
-                    Item item = new Item();
-                    if (forge[index] != null && forge[index].type != 0) {
-                        item.netDefaults(server,forge[index].type);
-                        item.Prefix(server,forge[index].prefix);
-                        item.AffixName();
-
-                        if (forge[index].stack > item.maxStack || forge[index].stack < 0) {
-                            check = true;
-                            if (shouldWarnPlayer) {
-                                SendErrorMessage(GetString("Stack cheat detected. Remove Defender's Forge item {0} ({1}) and then rejoin.", item.Name, forge[index].stack));
-                            }
-                        }
-                    }
-                }
-                else if (i < NetItem.VoidIndex.Item2) {
-                    // 220-260
-                    var index = i - NetItem.VoidIndex.Item1;
-                    Item item = new Item();
-                    if (voidVault[index] != null && voidVault[index].type != 0) {
-                        item.netDefaults(server,voidVault[index].type);
-                        item.Prefix(server,voidVault[index].prefix);
-                        item.AffixName();
-
-                        if (voidVault[index].stack > item.maxStack || voidVault[index].stack < 0) {
-                            check = true;
-                            if (shouldWarnPlayer) {
-                                SendErrorMessage(GetString("Stack cheat detected. Remove Void Vault item {0} ({1}) and then rejoin.", item.Name, voidVault[index].stack));
-                            }
-                        }
-                    }
-                }
-                else if (i < NetItem.Loadout1Armor.Item2) {
-                    var index = i - NetItem.Loadout1Armor.Item1;
-                    Item item = new Item();
-                    if (loadout1Armor[index] != null && loadout1Armor[index].type != 0) {
-                        item.netDefaults(server,loadout1Armor[index].type);
-                        item.Prefix(server,loadout1Armor[index].prefix);
-                        item.AffixName();
-
-                        if (loadout1Armor[index].stack > item.maxStack || loadout1Armor[index].stack < 0) {
-                            check = true;
-                            if (shouldWarnPlayer) {
-                                SendErrorMessage(GetString("Stack cheat detected. Remove Loadout 1 item {0} ({1}) and then rejoin.", item.Name, loadout1Armor[index].stack));
-                            }
-                        }
-                    }
-                }
-                else if (i < NetItem.Loadout1Dye.Item2) {
-                    var index = i - NetItem.Loadout1Dye.Item1;
-                    Item item = new Item();
-                    if (loadout1Dye[index] != null && loadout1Dye[index].type != 0) {
-                        item.netDefaults(server,loadout1Dye[index].type);
-                        item.Prefix(server,loadout1Dye[index].prefix);
-                        item.AffixName();
-
-                        if (loadout1Dye[index].stack > item.maxStack || loadout1Dye[index].stack < 0) {
-                            check = true;
-                            if (shouldWarnPlayer) {
-                                SendErrorMessage(GetString("Stack cheat detected. Remove Loadout 1 item {0} ({1}) and then rejoin.", item.Name, loadout1Dye[index].stack));
-                            }
-                        }
-                    }
-                }
-                else if (i < NetItem.Loadout2Armor.Item2) {
-                    var index = i - NetItem.Loadout2Armor.Item1;
-                    Item item = new Item();
-                    if (loadout2Armor[index] != null && loadout2Armor[index].type != 0) {
-                        item.netDefaults(server,loadout2Armor[index].type);
-                        item.Prefix(server,loadout2Armor[index].prefix);
-                        item.AffixName();
-
-                        if (loadout2Armor[index].stack > item.maxStack || loadout2Armor[index].stack < 0) {
-                            check = true;
-                            if (shouldWarnPlayer) {
-                                SendErrorMessage(GetString("Stack cheat detected. Remove Loadout 2 item {0} ({1}) and then rejoin.", item.Name, loadout2Armor[index].stack));
-                            }
-                        }
-                    }
-                }
-                else if (i < NetItem.Loadout2Dye.Item2) {
-                    var index = i - NetItem.Loadout2Dye.Item1;
-                    Item item = new Item();
-                    if (loadout2Dye[index] != null && loadout2Dye[index].type != 0) {
-                        item.netDefaults(server,loadout2Dye[index].type);
-                        item.Prefix(server,loadout2Dye[index].prefix);
-                        item.AffixName();
-
-                        if (loadout2Dye[index].stack > item.maxStack || loadout2Dye[index].stack < 0) {
-                            check = true;
-                            if (shouldWarnPlayer) {
-                                SendErrorMessage(GetString("Stack cheat detected. Remove Loadout 2 item {0} ({1}) and then rejoin.", item.Name, loadout2Dye[index].stack));
-                            }
-                        }
-                    }
-                }
-                else if (i < NetItem.Loadout3Armor.Item2) {
-                    var index = i - NetItem.Loadout3Armor.Item1;
-                    Item item = new Item();
-                    if (loadout3Armor[index] != null && loadout3Armor[index].type != 0) {
-                        item.netDefaults(server,loadout3Armor[index].type);
-                        item.Prefix(server,loadout3Armor[index].prefix);
-                        item.AffixName();
-
-                        if (loadout3Armor[index].stack > item.maxStack || loadout3Armor[index].stack < 0) {
-                            check = true;
-                            if (shouldWarnPlayer) {
-                                SendErrorMessage(GetString("Stack cheat detected. Remove Loadout 3 item {0} ({1}) and then rejoin.", item.Name, loadout3Armor[index].stack));
-                            }
-                        }
-                    }
-                }
-                else if (i < NetItem.Loadout3Dye.Item2) {
-                    var index = i - NetItem.Loadout3Dye.Item1;
-                    Item item = new Item();
-                    if (loadout3Dye[index] != null && loadout3Dye[index].type != 0) {
-                        item.netDefaults(server,loadout3Dye[index].type);
-                        item.Prefix(server,loadout3Dye[index].prefix);
-                        item.AffixName();
-
-                        if (loadout3Dye[index].stack > item.maxStack || loadout3Dye[index].stack < 0) {
-                            check = true;
-                            if (shouldWarnPlayer) {
-                                SendErrorMessage(GetString("Stack cheat detected. Remove Loadout 3 item {0} ({1}) and then rejoin.", item.Name, loadout3Dye[index].stack));
-                            }
-                        }
-                    }
-                }
+        private bool HasHackedStack(ServerContext server, Item template, Item stack, string warning, bool checkNegative, bool shouldWarnPlayer) {
+            if (stack == null || stack.type == 0) {
+                return false;
             }
 
-            return check;
+            template.netDefaults(server, stack.type);
+            template.Prefix(server, stack.prefix);
+            template.AffixName();
+            if (stack.stack <= template.maxStack && (!checkNegative || stack.stack >= 0)) {
+                return false;
+            }
+
+            if (shouldWarnPlayer) {
+                SendErrorMessage(GetString(warning, template.Name, stack.stack));
+            }
+            return true;
         }
 
         /// <summary>
