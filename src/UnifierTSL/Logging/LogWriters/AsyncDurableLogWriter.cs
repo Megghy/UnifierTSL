@@ -9,12 +9,10 @@ namespace UnifierTSL.Logging.LogWriters
         public const int BacklogWarnThreshold = 20_000;
         public const int BacklogWarnIntervalMs = 5_000;
 
-        private static readonly TimeSpan FlushInterval = TimeSpan.FromMilliseconds(200);
         private static readonly TimeSpan DefaultShutdownTimeout = TimeSpan.FromSeconds(3);
 
         private readonly IDurableLogSink sink;
         private readonly Channel<QueuedDurableLogRecord> queue;
-        private readonly CancellationTokenSource stoppingCts = new();
         private readonly Task consumerTask;
         private readonly Lock disposeGate = new();
         private readonly Lock sinkGate = new();
@@ -25,11 +23,12 @@ namespace UnifierTSL.Logging.LogWriters
         private int sinkFailed;
         private int sinkFailureReported;
         private int disposed;
+        private bool sinkDisposed;
 
         public AsyncDurableLogWriter(IDurableLogSink sink) {
             this.sink = sink;
             queue = Channel.CreateUnbounded<QueuedDurableLogRecord>(new UnboundedChannelOptions {
-                SingleReader = true,
+                SingleReader = false,
                 SingleWriter = false,
                 AllowSynchronousContinuations = false,
             });
@@ -73,47 +72,23 @@ namespace UnifierTSL.Logging.LogWriters
         }
 
         private async Task ConsumeLoop() {
-            List<QueuedDurableLogRecord> batch = new(BatchSize);
-            using PeriodicTimer flushTimer = new(FlushInterval);
-
-            Task<bool> readTask = queue.Reader.WaitToReadAsync(stoppingCts.Token).AsTask();
-            Task<bool> tickTask = flushTimer.WaitForNextTickAsync(stoppingCts.Token).AsTask();
-
             try {
-                while (true) {
-                    Task completed = await Task.WhenAny(readTask, tickTask);
-                    if (completed == readTask) {
-                        bool canRead = await readTask;
-                        readTask = queue.Reader.WaitToReadAsync(stoppingCts.Token).AsTask();
-                        if (!canRead) {
-                            break;
-                        }
-
-                        DrainPendingRecords(batch);
-                        FlushBatch(batch);
-                    }
-                    else {
-                        bool hasTick = await tickTask;
-                        tickTask = flushTimer.WaitForNextTickAsync(stoppingCts.Token).AsTask();
-                        if (!hasTick) {
-                            break;
-                        }
-
-                        FlushBatch(batch);
-                    }
+                while (await queue.Reader.WaitToReadAsync()) {
+                    FlushSync();
                 }
-
-                DrainPendingRecords(batch);
-                FlushBatch(batch);
-                FlushSink();
-            }
-            catch (OperationCanceledException) {
-                DrainPendingRecords(batch);
-                FlushBatch(batch);
-                FlushSink();
+                FlushSync();
             }
             finally {
-                ReturnBatchResources(batch);
+                // 超时只结束调用方的等待；sink 必须等最后一批写入完成后释放。
+                lock (sinkGate) {
+                    sinkDisposed = true;
+                    try {
+                        sink.Dispose();
+                    }
+                    catch (Exception ex) {
+                        MarkSinkFailure(ex);
+                    }
+                }
             }
         }
 
@@ -134,10 +109,8 @@ namespace UnifierTSL.Logging.LogWriters
 
             try {
                 if (Volatile.Read(ref sinkFailed) == 0) {
-                    lock (sinkGate) {
-                        sink.WriteBatch(CollectionsMarshal.AsSpan(batch));
-                        sink.Flush();
-                    }
+                    sink.WriteBatch(CollectionsMarshal.AsSpan(batch));
+                    sink.Flush();
                 }
             }
             catch (Exception ex) {
@@ -154,9 +127,7 @@ namespace UnifierTSL.Logging.LogWriters
             }
 
             try {
-                lock (sinkGate) {
-                    sink.Flush();
-                }
+                sink.Flush();
             }
             catch (Exception ex) {
                 MarkSinkFailure(ex);
@@ -193,63 +164,30 @@ namespace UnifierTSL.Logging.LogWriters
         }
 
         public void FlushSync() {
-            if (Volatile.Read(ref sinkFailed) != 0) {
-                return;
-            }
-
-            try {
-                List<QueuedDurableLogRecord> batch = new();
-                while (queue.Reader.TryRead(out var record)) {
-                    batch.Add(record);
-                    Interlocked.Increment(ref dequeuedCount);
+            // 锁必须覆盖出队到落盘，防止同步刷新漏掉后台已出队但尚未写入的日志。
+            lock (sinkGate) {
+                if (sinkDisposed) {
+                    return;
                 }
-
-                if (batch.Count > 0) {
-                    lock (sinkGate) {
-                        sink.WriteBatch(CollectionsMarshal.AsSpan(batch));
-                    }
+                List<QueuedDurableLogRecord> batch = new(BatchSize);
+                try {
+                    DrainPendingRecords(batch);
+                    FlushBatch(batch);
+                    FlushSink();
+                }
+                finally {
                     ReturnBatchResources(batch);
                 }
-
-                lock (sinkGate) {
-                    sink.Flush();
-                }
-            }
-            catch (Exception ex) {
-                MarkSinkFailure(ex);
             }
         }
 
         public bool TryFlushAndStop(TimeSpan timeout) {
-            bool alreadyDisposed = false;
             lock (disposeGate) {
-                if (Interlocked.Exchange(ref disposed, 1) != 0) {
-                    alreadyDisposed = true;
-                }
-                else {
+                if (Interlocked.Exchange(ref disposed, 1) == 0) {
                     queue.Writer.TryComplete();
                 }
             }
-
-            if (alreadyDisposed) {
-                return true;
-            }
-
-            bool completed = WaitForConsumer(timeout);
-            if (!completed) {
-                stoppingCts.Cancel();
-                completed = WaitForConsumer(TimeSpan.FromMilliseconds(500));
-            }
-
-            try {
-                sink.Dispose();
-            }
-            catch (Exception ex) {
-                MarkSinkFailure(ex);
-            }
-
-            stoppingCts.Dispose();
-            return completed;
+            return WaitForConsumer(timeout);
         }
 
         private bool WaitForConsumer(TimeSpan timeout) {

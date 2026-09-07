@@ -160,11 +160,23 @@ namespace TShockAPI
         }
 
         /// <summary>
-        /// 按真实聊天链路派发指令: 先走 V2 注册表, 未命中再回落到旧版 <see cref="ChatCommands"/>。
+        /// 按真实聊天链路派发指令: 同名旧版插件命令优先，否则走 V2 注册表。
         /// 插件需要代玩家执行指令时必须用这个入口, 直接查 <see cref="ChatCommands"/> 找不到任何内置指令。
         /// </summary>
         /// <returns>指令是否被某个注册表处理</returns>
         public static bool Dispatch(CommandExecutor executor, string text) {
+            return DispatchCore(executor, text, includeLegacy: true);
+        }
+
+        /// <summary>
+        /// 直接派发 V2 命令，供接管同名命令的插件调用原版实现，避免重新进入自身。
+        /// V2 的参数绑定、权限检查和审计仍正常执行。
+        /// </summary>
+        public static bool DispatchDeclarative(CommandExecutor executor, string text) {
+            return DispatchCore(executor, text, includeLegacy: false);
+        }
+
+        private static bool DispatchCore(CommandExecutor executor, string text, bool includeLegacy) {
             ArgumentNullException.ThrowIfNull(executor);
             if (string.IsNullOrWhiteSpace(text)) {
                 return false;
@@ -177,7 +189,7 @@ namespace TShockAPI
                 text,
                 TSCommandBridge.IsSilentInvocation(text));
 
-            if (CommandDispatchCoordinator.TryCreateExecutionRequest(request, out var execReq)
+            if (includeLegacy && CommandDispatchCoordinator.TryCreateExecutionRequest(request, out var execReq)
                 && RequiresLegacyDispatch(executor, execReq.InvokedRoot)) {
                 return HandleCommand(executor, execReq.RawInput);
             }
@@ -192,7 +204,7 @@ namespace TShockAPI
                 return true;
             }
 
-            if (RequiresLegacyDispatch(executor, result.ExecutionRequest?.InvokedRoot)) {
+            if (includeLegacy && RequiresLegacyDispatch(executor, result.ExecutionRequest?.InvokedRoot)) {
                 return HandleCommand(executor, result.ExecutionRequest?.RawInput ?? text);
             }
 
