@@ -808,7 +808,8 @@ namespace TShockAPI
                 Utils.SendLogs(server, GetString("{0} has joined. IP: {1}", player.Name, player.IP), Color.Blue);
             }
 
-            player.SendFileTextAsMessage(FileTools.MotdPath);
+            if (!Hooks.PlayerGreetingHooks.Invoke(player))
+                player.SendFileTextAsMessage(FileTools.MotdPath);
 
             string pvpMode = setting.PvPMode.ToLowerInvariant();
             if (pvpMode is PvPModes.Always or PvPModes.PvPWithNoTeam) {
