@@ -114,7 +114,7 @@ namespace TShockAPI.Commanding.V2
 
         private static PaginationTools.Settings CreatePageSettings() {
             return new PaginationTools.Settings {
-                HeaderFormat = GetString("Commands ({{0}}/{{1}}):"),
+                HeaderFormat = GetString("Commands ({0}/{1}):"),
                 FooterFormat = GetString("Type {0}help {{0}} for more.", Commands.Specifier),
             };
         }
@@ -209,7 +209,7 @@ namespace TShockAPI.Commanding.V2
         private static PaginationTools.Settings CreateRestUserPageSettings() {
             return new PaginationTools.Settings {
                 NothingToDisplayString = GetString("There are currently no active REST users."),
-                HeaderFormat = GetString("Active REST Users ({{0}}/{{1}}):"),
+                HeaderFormat = GetString("Active REST Users ({0}/{1}):"),
                 FooterFormat = GetString("Type {0}rest listusers {{0}} for more.", Commands.Specifier),
             };
         }

@@ -1313,8 +1313,8 @@ msgid "Account removed successfully."
 msgstr "Akun berhasil dihapus."
 
 #: ../../src/Plugins/TShockAPI/Commanding/V2/GeneralCommands.cs:212
-msgid "Active REST Users ({{0}}/{{1}}):"
-msgstr "Pengguna-pengguna REST aktif ({{0}}/{{1}}):"
+msgid "Active REST Users ({0}/{1}):"
+msgstr "Pengguna-pengguna REST aktif ({0}/{1}):"
 
 #: ../../src/Plugins/TShockAPI/Commanding/V2/RestrictionCommands.cs:18
 #: ../../src/Plugins/TShockAPI/Commanding/V2/RestrictionCommands.cs:164
@@ -1568,8 +1568,8 @@ msgid "Available identifiers ({0}/{1}):"
 msgstr ""
 
 #: ../../src/Plugins/TShockAPI/Commanding/V2/RegionCommands.cs:611
-msgid "Available Region Sub-Commands ({{0}}/{{1}}):"
-msgstr "Wilayah tersedia Sub-Perintah ({{0}}/{{1}}):"
+msgid "Available Region Sub-Commands ({0}/{1}):"
+msgstr "Wilayah tersedia Sub-Perintah ({0}/{1}):"
 
 #: ../../src/Plugins/TShockAPI/Commanding/V2/GeneralCommands.cs:178
 msgid "Available REST Sub-Commands:"
@@ -2859,8 +2859,8 @@ msgid "Command failed, check logs for more details."
 msgstr "Perintah telah gagal, periksa catatan untuk detail lebih lanjut."
 
 #: ../../src/Plugins/TShockAPI/Commanding/V2/GeneralCommands.cs:117
-msgid "Commands ({{0}}/{{1}}):"
-msgstr "Perintah-perintah ({{0}}/{{1}}):"
+msgid "Commands ({0}/{1}):"
+msgstr "Perintah-perintah ({0}/{1}):"
 
 #: ../../src/Plugins/TShockAPI/Commanding/V2/TeleportCommands.cs:454
 msgid "Commands: add, del, hide, list, send, [warpname]."
@@ -4733,12 +4733,12 @@ msgid "IPv6 addresses are not supported as of yet by TShock. This rule will have
 msgstr ""
 
 #: ../../src/Plugins/TShockAPI/Commanding/V2/RestrictionCommands.cs:174
-msgid "Item Ban Sub-Commands ({{0}}/{{1}}):"
-msgstr "Sub-Perintah Item Ban {{0}}/{{1}}:"
+msgid "Item Ban Sub-Commands ({0}/{1}):"
+msgstr "Sub-Perintah Item Ban {0}/{1}:"
 
 #: ../../src/Plugins/TShockAPI/Commanding/V2/RestrictionCommands.cs:185
-msgid "Item bans ({{0}}/{{1}}):"
-msgstr "Item yang diblokir ({{0}}/{{1}}):"
+msgid "Item bans ({0}/{1}):"
+msgstr "Item yang diblokir ({0}/{1}):"
 
 #: ../../src/Plugins/TShockAPI/TSPlayer.cs:2060
 #, csharp-format
@@ -5177,8 +5177,8 @@ msgid "Overrides server-side character data from a player's current local state.
 msgstr ""
 
 #: ../../src/Plugins/TShockAPI/PaginationTools.cs:105
-msgid "Page {{0}} of {{1}}"
-msgstr "Halaman {{0}} dari {{1}} halaman"
+msgid "Page {0} of {1}"
+msgstr "Halaman {0} dari {1} halaman"
 
 #: ../../src/Plugins/TShockAPI/Commanding/V2/ManagementCommands.cs:425
 msgid "parent <group> <parent group> - Changes a group's parent group."
@@ -5382,12 +5382,12 @@ msgid "Projectile {0} is not banned."
 msgstr "Proyektil {0} tidak diblokir."
 
 #: ../../src/Plugins/TShockAPI/Commanding/V2/RestrictionCommands.cs:344
-msgid "Projectile Ban Sub-Commands ({{0}}/{{1}}):"
-msgstr "Sub-Perintah dari Projectile Ban ({{0}}/{{1}}):"
+msgid "Projectile Ban Sub-Commands ({0}/{1}):"
+msgstr "Sub-Perintah dari Projectile Ban ({0}/{1}):"
 
 #: ../../src/Plugins/TShockAPI/Commanding/V2/RestrictionCommands.cs:355
-msgid "Projectile bans ({{0}}/{{1}}):"
-msgstr "Pemblokiran proyektil ({{0}}/{{1}}):"
+msgid "Projectile bans ({0}/{1}):"
+msgstr "Pemblokiran proyektil ({0}/{1}):"
 
 #: ../../src/Plugins/TShockAPI/Bouncer.cs:1688
 #, csharp-format
@@ -6773,12 +6773,12 @@ msgid "Tile {0} is not banned."
 msgstr "Tile {0} tidak diblokir."
 
 #: ../../src/Plugins/TShockAPI/Commanding/V2/RestrictionCommands.cs:513
-msgid "Tile Ban Sub-Commands ({{0}}/{{1}}):"
-msgstr "Sub-Perintah Tile Ban {{0}}/{{1}}:"
+msgid "Tile Ban Sub-Commands ({0}/{1}):"
+msgstr "Sub-Perintah Tile Ban {0}/{1}:"
 
 #: ../../src/Plugins/TShockAPI/Commanding/V2/RestrictionCommands.cs:524
-msgid "Tile bans ({{0}}/{{1}}):"
-msgstr "Pemblokiran Tile ({{0}}/{{1}}):"
+msgid "Tile bans ({0}/{1}):"
+msgstr "Pemblokiran Tile ({0}/{1}):"
 
 #: ../../src/Plugins/TShockAPI/Bouncer.cs:1222
 #, csharp-format
@@ -7063,8 +7063,8 @@ msgid "Type {0}who {1} for more."
 msgstr "Ketik {0}who {1} untuk informasi lebih lanjut."
 
 #: ../../src/Plugins/TShockAPI/PaginationTools.cs:108
-msgid "Type /<command> {{0}} for more."
-msgstr "Ketik /<command> {{0}} untuk informasi lebih lanjut."
+msgid "Type /<command> {0} for more."
+msgstr "Ketik /<command> {0} untuk informasi lebih lanjut."
 
 #: ../../src/Plugins/TShockAPI/Commanding/TSCommandParamBinders.cs:1228
 #, csharp-format

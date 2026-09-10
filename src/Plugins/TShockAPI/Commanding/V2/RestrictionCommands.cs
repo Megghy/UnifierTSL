@@ -171,7 +171,7 @@ namespace TShockAPI.Commanding.V2
 
         private static PaginationTools.Settings CreateHelpPageSettings() {
             return new PaginationTools.Settings {
-                HeaderFormat = GetString("Item Ban Sub-Commands ({{0}}/{{1}}):"),
+                HeaderFormat = GetString("Item Ban Sub-Commands ({0}/{1}):"),
                 FooterFormat = GetString("Type {0}itemban help {{0}} for more sub-commands.", Commands.Specifier),
             };
         }
@@ -182,7 +182,7 @@ namespace TShockAPI.Commanding.V2
 
         private static PaginationTools.Settings CreateListPageSettings() {
             return new PaginationTools.Settings {
-                HeaderFormat = GetString("Item bans ({{0}}/{{1}}):"),
+                HeaderFormat = GetString("Item bans ({0}/{1}):"),
                 FooterFormat = GetString("Type {0}itemban list {{0}} for more.", Commands.Specifier),
                 NothingToDisplayString = GetString("There are currently no banned items."),
             };
@@ -341,7 +341,7 @@ namespace TShockAPI.Commanding.V2
 
         private static PaginationTools.Settings CreateHelpPageSettings() {
             return new PaginationTools.Settings {
-                HeaderFormat = GetString("Projectile Ban Sub-Commands ({{0}}/{{1}}):"),
+                HeaderFormat = GetString("Projectile Ban Sub-Commands ({0}/{1}):"),
                 FooterFormat = GetString("Type {0}projban help {{0}} for more sub-commands.", Commands.Specifier),
             };
         }
@@ -352,7 +352,7 @@ namespace TShockAPI.Commanding.V2
 
         private static PaginationTools.Settings CreateListPageSettings() {
             return new PaginationTools.Settings {
-                HeaderFormat = GetString("Projectile bans ({{0}}/{{1}}):"),
+                HeaderFormat = GetString("Projectile bans ({0}/{1}):"),
                 FooterFormat = GetString("Type {0}projban list {{0}} for more.", Commands.Specifier),
                 NothingToDisplayString = GetString("There are currently no banned projectiles."),
             };
@@ -510,7 +510,7 @@ namespace TShockAPI.Commanding.V2
 
         private static PaginationTools.Settings CreateHelpPageSettings() {
             return new PaginationTools.Settings {
-                HeaderFormat = GetString("Tile Ban Sub-Commands ({{0}}/{{1}}):"),
+                HeaderFormat = GetString("Tile Ban Sub-Commands ({0}/{1}):"),
                 FooterFormat = GetString("Type {0}tileban help {{0}} for more sub-commands.", Commands.Specifier),
             };
         }
@@ -521,7 +521,7 @@ namespace TShockAPI.Commanding.V2
 
         private static PaginationTools.Settings CreateListPageSettings() {
             return new PaginationTools.Settings {
-                HeaderFormat = GetString("Tile bans ({{0}}/{{1}}):"),
+                HeaderFormat = GetString("Tile bans ({0}/{1}):"),
                 FooterFormat = GetString("Type {0}tileban list {{0}} for more.", Commands.Specifier),
                 NothingToDisplayString = GetString("There are currently no banned tiles."),
             };

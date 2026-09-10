@@ -608,7 +608,7 @@ namespace TShockAPI.Commanding.V2
 
         private static PaginationTools.Settings CreateHelpPageSettings() {
             return new PaginationTools.Settings {
-                HeaderFormat = GetString("Available Region Sub-Commands ({{0}}/{{1}}):"),
+                HeaderFormat = GetString("Available Region Sub-Commands ({0}/{1}):"),
                 FooterFormat = GetString("Type {0}region {{0}} for more sub-commands.", Commands.Specifier),
             };
         }

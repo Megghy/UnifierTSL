@@ -18,7 +18,7 @@ namespace UnifierTSL
         /// </summary>
         /// <param name="text">Text to translate.</param>
         /// <returns>Translated text.</returns>
-        static string GetString(FormattableStringAdapter text) {
+        public static string GetString(FormattableStringAdapter text) {
             return C.GetString(text);
         }
 
