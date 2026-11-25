@@ -34,8 +34,10 @@ namespace TShockAPI.DB
             public required string Owner { get; set; }
             [Column] public int Z { get; set; }
         }
+        readonly Lock _regionsLock = new();
         public List<Region> Regions = new List<Region>();
-        public int Generation { get; private set; }
+        int _generation;
+        public int Generation => Volatile.Read(ref _generation);
         readonly Func<DataConnection> _dbFactory;
         public RegionManager(DataConnection db) {
             _dbFactory = DataConnectionFactory.FromPrototype(db);
@@ -48,9 +50,9 @@ namespace TShockAPI.DB
         /// </summary>
         public void Reload() {
             try {
-                Regions.Clear();
                 using var db = _dbFactory();
                 var regionRecords = db.GetTable<RegionTable>().ToList();
+                var loaded = new List<Region>(regionRecords.Count);
 
                 foreach (var record in regionRecords)
                 {
@@ -78,9 +80,13 @@ namespace TShockAPI.DB
                         TShock.Log.Error(e.StackTrace);
                     }
 
-                    Regions.Add(r);
+                    loaded.Add(r);
                 }
-                NoteRegionsChanged();
+
+                lock (_regionsLock) {
+                    Volatile.Write(ref Regions, loaded);
+                    NoteRegionsChanged();
+                }
             }
             catch (Exception ex) {
                 TShock.Log.Error(ex.ToString());
@@ -113,8 +119,13 @@ namespace TShockAPI.DB
                 newRegion.Id = db.InsertWithInt32Identity(newRegion);
 
                 Region region = new Region(newRegion.Id, new Rectangle(tx, ty, width, height), regionname, owner, true, worldid, z);
-                Regions.Add(region);
-                NoteRegionsChanged();
+                lock (_regionsLock) {
+                    var next = new List<Region>(Regions.Count + 1);
+                    next.AddRange(Regions);
+                    next.Add(region);
+                    Volatile.Write(ref Regions, next);
+                    NoteRegionsChanged();
+                }
                 Hooks.RegionHooks.OnRegionCreated(region);
                 return true;
             }
@@ -132,9 +143,19 @@ namespace TShockAPI.DB
                 using var db = _dbFactory();
                 db.GetTable<RegionTable>().Where(r => r.Id == id && r.WorldID == worldid).Delete();
 
-                var region = Regions.FirstOrDefault(r => r.ID == id && r.WorldID == worldid);
-                Regions.RemoveAll(r => r.ID == id && r.WorldID == worldid);
-                NoteRegionsChanged();
+                Region? region;
+                lock (_regionsLock) {
+                    var current = Regions;
+                    region = current.FirstOrDefault(r => r.ID == id && r.WorldID == worldid);
+                    var next = new List<Region>(current.Count);
+                    for (int i = 0; i < current.Count; i++) {
+                        if (current[i].ID != id || current[i].WorldID != worldid) {
+                            next.Add(current[i]);
+                        }
+                    }
+                    Volatile.Write(ref Regions, next);
+                    NoteRegionsChanged();
+                }
                 Hooks.RegionHooks.OnRegionDeleted(region);
                 return true;
             }
@@ -152,9 +173,19 @@ namespace TShockAPI.DB
                 using var db = _dbFactory();
                 db.GetTable<RegionTable>().Where(r => r.RegionName == name && r.WorldID == worldid).Delete();
 
-                var region = Regions.FirstOrDefault(r => r.Name == name && r.WorldID == worldid);
-                Regions.RemoveAll(r => r.Name == name && r.WorldID == worldid);
-                NoteRegionsChanged();
+                Region? region;
+                lock (_regionsLock) {
+                    var current = Regions;
+                    region = current.FirstOrDefault(r => r.Name == name && r.WorldID == worldid);
+                    var next = new List<Region>(current.Count);
+                    for (int i = 0; i < current.Count; i++) {
+                        if (current[i].Name != name || current[i].WorldID != worldid) {
+                            next.Add(current[i]);
+                        }
+                    }
+                    Volatile.Write(ref Regions, next);
+                    NoteRegionsChanged();
+                }
                 Hooks.RegionHooks.OnRegionDeleted(region);
                 return true;
             }
@@ -518,7 +549,7 @@ namespace TShockAPI.DB
         }
 
         public Region? GetTopRegionAt(string worldId, int x, int y)
-            => GetTopRegionAt(Regions, worldId, x, y);
+            => GetTopRegionAt(Volatile.Read(ref Regions), worldId, x, y);
 
         public static Region? GetTopRegionAt(List<Region> regions, string worldId, int x, int y)
         {
@@ -532,7 +563,7 @@ namespace TShockAPI.DB
             return top;
         }
 
-        void NoteRegionsChanged() => Generation++;
+        void NoteRegionsChanged() => Interlocked.Increment(ref _generation);
 
         /// <summary>
         /// Checks if a given player can build in a region at the given (x, y) coordinate

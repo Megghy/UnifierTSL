@@ -66,9 +66,9 @@ public sealed class MemoryWorldDataProvider : IWorldDataProvider
             ready.TrySetResult();
         }
         catch (Exception exception) {
+            server.WorldFile.LastThrownLoadException = exception;
             server.WorldGen.loadFailed = true;
             ready.TrySetException(exception);
-            throw;
         }
     }
 }

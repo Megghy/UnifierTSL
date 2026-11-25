@@ -647,33 +647,14 @@ namespace TShockAPI
                 var executor = new CommandExecutor(sender.SourceServer, sender.UserId);
                 try {
                     args.Handled = true;
-                    var endpointId = TSCommandBridge.ResolveEndpointId(executor);
-                    var request = TSCommandBridge.CreateDispatchRequest(
+                    if (TSCommandBridge.TryDispatchCommand(
                         executor,
-                        endpointId,
                         text,
-                        TSCommandBridge.IsSilentInvocation(text));
-
-                    if (CommandDispatchCoordinator.TryCreateExecutionRequest(request, out var execReq)
-                        && Commands.RequiresLegacyDispatch(executor, execReq.InvokedRoot)) {
-                        if (!Commands.HandleCommand(executor, execReq.RawInput)) {
-                            if (executor.IsClient) {
-                                executor.Player.SendErrorMessage(GetString("Unable to parse command. Please contact an administrator for assistance."));
-                            }
-                            Log.Error(GetString("Unable to parse command '{0}' from player {1}.", text, executor.Name));
-                        }
-                        return;
-                    }
-
-                    var result = CommandDispatchCoordinator.DispatchAsync(request)
-                        .GetAwaiter()
-                        .GetResult();
-                    if (result.Matched) {
-                        TSCommandBridge.AuditDispatch(executor, request, result);
-                        CommandSystem.GetOutcomeWriter<CommandExecutor>().Write(executor, result.Outcome ?? CommandOutcome.Empty);
-                    }
-                    else if (Commands.RequiresLegacyDispatch(executor, result.ExecutionRequest?.InvokedRoot)) {
-                        if (!Commands.HandleCommand(executor, result.ExecutionRequest?.RawInput ?? text)) {
+                        TSCommandBridge.IsSilentInvocation(text),
+                        includeLegacy: true,
+                        requireTShockRoot: false,
+                        out bool succeeded)) {
+                        if (!succeeded) {
                             if (executor.IsClient) {
                                 executor.Player.SendErrorMessage(GetString("Unable to parse command. Please contact an administrator for assistance."));
                             }

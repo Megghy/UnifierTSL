@@ -6963,7 +6963,7 @@ msgstr "詳細を確認するには、 {0}ban list {{0}} を入力してくだ�
 #: ../../src/Plugins/TShockAPI/Commanding/V2/ManagementCommands.cs:434
 #, csharp-format
 msgid "Type {0}group help {{0}} for more sub-commands."
-msgstr "サブコマンドの詳細を確認するには、{0}group help {{0}}} を入力してください"
+msgstr "サブコマンドの詳細を確認するには、{0}group help {{0}} を入力してください"
 
 #: ../../src/Plugins/TShockAPI/Commanding/V2/ManagementCommands.cs:445
 #, csharp-format

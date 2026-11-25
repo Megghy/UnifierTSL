@@ -74,16 +74,19 @@ namespace TShockAPI
                 return;
 
             var player = args.GetTSPlayer();
+            var server = args.LocalReceiver.Server;
             var pos = args.Packet.Position;
             var tileX = (int)(pos.X / 16);
             var tileY = (int)(pos.Y / 16);
-            if (!player.TryBeginRegionQuery(tileX, tileY, _regionManager.Generation))
+            var worldId = server.Main.worldID;
+            if (!player.TryBeginRegionQuery(tileX, tileY, _regionManager.Generation, worldId))
                 return;
 
             var oldRegion = player.CurrentRegion;
-            Region? next = null;
-            if (_regionManager.Regions.Count != 0)
-                next = _regionManager.GetTopRegionAt(args.LocalReceiver.Server.Main.worldID.ToString(), tileX, tileY);
+            var regions = Volatile.Read(ref _regionManager.Regions);
+            Region? next = regions.Count != 0
+                ? RegionManager.GetTopRegionAt(regions, worldId.ToString(), tileX, tileY)
+                : null;
 
             if (next == oldRegion)
                 return;

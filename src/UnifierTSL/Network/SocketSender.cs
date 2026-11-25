@@ -71,20 +71,34 @@ namespace UnifierTSL.Network
             }
             catch {
                 ArrayPool<byte>.Shared.Return(buffer);
+                return;
             }
             CountSentBytes((uint)size);
         }
+
+        private const int MaxPooledFreeBufferStates = 4096;
+        private static int pooledFreeBufferStateCount;
 
         private sealed class FreeBufferState {
             public byte[] Buffer = null!;
             public SocketSendCallback Callback = null!;
             public object? State;
+            private int _bufferReturned;
             private int _recycled;
             public void Reset(byte[] buffer, SocketSendCallback callback, object? state) {
                 Buffer = buffer;
                 Callback = callback;
                 State = state;
-                _recycled = 0;
+                Volatile.Write(ref _bufferReturned, 0);
+                Volatile.Write(ref _recycled, 0);
+            }
+            public void ReturnBufferOnce() {
+                if (Interlocked.Exchange(ref _bufferReturned, 1) != 0)
+                    return;
+                byte[] buffer = Buffer;
+                Buffer = null!;
+                if (buffer is not null)
+                    ArrayPool<byte>.Shared.Return(buffer);
             }
             public void Recycle() {
                 if (Interlocked.Exchange(ref _recycled, 1) != 0)
@@ -92,7 +106,12 @@ namespace UnifierTSL.Network
                 Buffer = null!;
                 Callback = null!;
                 State = null;
-                FreeBufferStates.Add(this);
+                if (Interlocked.Increment(ref pooledFreeBufferStateCount) <= MaxPooledFreeBufferStates) {
+                    FreeBufferStates.Add(this);
+                }
+                else {
+                    Interlocked.Decrement(ref pooledFreeBufferStateCount);
+                }
             }
         }
         private static readonly ConcurrentBag<FreeBufferState> FreeBufferStates = new();
@@ -105,14 +124,18 @@ namespace UnifierTSL.Network
             }
             FreeBufferState? callbackState = null;
             try {
-                callbackState = FreeBufferStates.TryTake(out var pooled)
-                    ? pooled
-                    : new FreeBufferState();
+                if (FreeBufferStates.TryTake(out var pooled)) {
+                    Interlocked.Decrement(ref pooledFreeBufferStateCount);
+                    callbackState = pooled;
+                }
+                else {
+                    callbackState = new FreeBufferState();
+                }
                 callbackState.Reset(buffer, callback, state);
                 sk.AsyncSendNoCopy(buffer, index, size, static boxedState => {
                     FreeBufferState state = (FreeBufferState)boxedState;
                     try {
-                        ArrayPool<byte>.Shared.Return(state.Buffer);
+                        state.ReturnBufferOnce();
                         state.Callback(state.State);
                     }
                     finally {
@@ -121,8 +144,14 @@ namespace UnifierTSL.Network
                 }, callbackState);
             }
             catch {
-                ArrayPool<byte>.Shared.Return(buffer);
-                callbackState?.Recycle();
+                if (callbackState is not null) {
+                    callbackState.ReturnBufferOnce();
+                    callbackState.Recycle();
+                }
+                else {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                }
+                return;
             }
             CountSentBytes((uint)size);
         }

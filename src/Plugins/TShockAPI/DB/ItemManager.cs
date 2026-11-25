@@ -24,9 +24,12 @@ namespace TShockAPI.DB
             public required string AllowedGroups { get; set; }
         }
         readonly Func<DataConnection> _dbFactory;
+        readonly Lock _sync = new();
         public List<ItemBan> ItemBans = [];
         Dictionary<string, ItemBan> _byName = new(StringComparer.Ordinal);
         Dictionary<int, ItemBan> _byType = [];
+
+        public bool HasBans => Volatile.Read(ref _byName).Count > 0;
 
         public ItemManager(DataConnection db) {
             _dbFactory = DataConnectionFactory.FromPrototype(db);
@@ -38,24 +41,26 @@ namespace TShockAPI.DB
             UpdateItemBans();
         }
         public void UpdateItemBans() {
-            ItemBans.Clear();
-
             try {
                 using var db = _dbFactory();
                 var bans = db.GetTable<ItemBansTable>()
                     .Select(b => new { b.Name, b.AllowedGroups })
                     .ToList();
 
+                var loaded = new List<ItemBan>(bans.Count);
                 foreach (var b in bans) {
                     ItemBan ban = new ItemBan(b.Name);
                     ban.SetAllowedGroups(b.AllowedGroups ?? "");
-                    ItemBans.Add(ban);
+                    loaded.Add(ban);
+                }
+
+                lock (_sync) {
+                    PublishSnapshot(loaded);
                 }
             }
             catch (Exception ex) {
                 TShock.Log.Error(ex.ToString());
             }
-            RebuildLookups();
         }
 
         public void AddNewBan(string itemname = "") {
@@ -70,9 +75,14 @@ namespace TShockAPI.DB
                     });
                 }
 
-                if (!ItemIsBanned(itemname, null))
-                    ItemBans.Add(new ItemBan(itemname));
-                RebuildLookups();
+                lock (_sync) {
+                    if (!ItemIsBanned(itemname, null)) {
+                        var next = new List<ItemBan>(ItemBans.Count + 1);
+                        next.AddRange(ItemBans);
+                        next.Add(new ItemBan(itemname));
+                        PublishSnapshot(next);
+                    }
+                }
             }
             catch (Exception ex) {
                 TShock.Log.Error(ex.ToString());
@@ -87,8 +97,13 @@ namespace TShockAPI.DB
                 using var db = _dbFactory();
                 var itemBansTable = db.GetTable<ItemBansTable>();
                 itemBansTable.Where(b => b.Name == itemname).Delete();
-                ItemBans.Remove(new ItemBan(itemname));
-                RebuildLookups();
+
+                lock (_sync) {
+                    var next = new List<ItemBan>(ItemBans);
+                    if (next.Remove(new ItemBan(itemname))) {
+                        PublishSnapshot(next);
+                    }
+                }
             }
             catch (Exception ex) {
                 TShock.Log.Error(ex.ToString());
@@ -146,18 +161,18 @@ namespace TShockAPI.DB
             return false;
         }
 
-        public bool ItemIsBanned(string? name) => name is not null && _byName.ContainsKey(name);
+        public bool ItemIsBanned(string? name) => name is not null && Volatile.Read(ref _byName).ContainsKey(name);
 
         public bool ItemIsBanned(int type, TSPlayer? ply)
-            => _byType.TryGetValue(type, out var ban) && !ban.HasPermissionToUseItem(ply);
+            => Volatile.Read(ref _byType).TryGetValue(type, out var ban) && !ban.HasPermissionToUseItem(ply);
 
         public bool ItemIsBanned(string? name, TSPlayer? ply) {
             if (name is null) return false;
-            return _byName.TryGetValue(name, out var ban) && !ban.HasPermissionToUseItem(ply);
+            return Volatile.Read(ref _byName).TryGetValue(name, out var ban) && !ban.HasPermissionToUseItem(ply);
         }
 
         public ItemBan? GetItemBanByName(string? name)
-            => name is not null && _byName.TryGetValue(name, out var ban) ? ban : null;
+            => name is not null && Volatile.Read(ref _byName).TryGetValue(name, out var ban) ? ban : null;
 
         internal static void FillLookups(
             List<ItemBan> bans,
@@ -180,13 +195,14 @@ namespace TShockAPI.DB
             }
         }
 
-        void RebuildLookups()
+        void PublishSnapshot(List<ItemBan> next)
         {
-            var byName = new Dictionary<string, ItemBan>(ItemBans.Count, StringComparer.Ordinal);
+            var byName = new Dictionary<string, ItemBan>(next.Count, StringComparer.Ordinal);
             var byType = new Dictionary<int, ItemBan>();
-            FillLookups(ItemBans, byName, byType, EnglishLanguage.GetItemNameById, ItemID.Count);
-            _byName = byName;
-            _byType = byType;
+            FillLookups(next, byName, byType, EnglishLanguage.GetItemNameById, ItemID.Count);
+            Volatile.Write(ref _byName, byName);
+            Volatile.Write(ref _byType, byType);
+            Volatile.Write(ref ItemBans, next);
         }
     }
     public class ItemBan : IEquatable<ItemBan>

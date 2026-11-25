@@ -57,24 +57,45 @@ namespace TShockAPI.Commanding
         public static bool TryHandleDirectCommand(CommandExecutor executor, string rawInput, bool silent) {
             ArgumentNullException.ThrowIfNullOrWhiteSpace(rawInput);
 
-            var endpointId = ResolveEndpointId(executor);
-            var request = CreateDispatchRequest(executor, endpointId, rawInput, silent);
+            return TryDispatchCommand(
+                executor,
+                rawInput,
+                silent,
+                includeLegacy: true,
+                requireTShockRoot: true,
+                out bool handled) && handled;
+        }
 
-            if (CommandDispatchCoordinator.TryCreateExecutionRequest(request, out var execReq)
+        public static bool TryDispatchCommand(
+            CommandExecutor executor,
+            string rawInput,
+            bool silent,
+            bool includeLegacy,
+            bool requireTShockRoot,
+            out bool succeeded) {
+            var endpointId = ResolveEndpointId(executor);
+            var request = CommandDispatchCoordinator.PrepareRequest(
+                CreateDispatchRequest(executor, endpointId, rawInput, silent));
+
+            if (includeLegacy
+                && CommandDispatchCoordinator.TryCreateExecutionRequest(request, out var execReq)
                 && Commands.RequiresLegacyDispatch(executor, execReq.InvokedRoot)) {
-                return Commands.HandleCommand(executor, execReq.RawInput);
+                succeeded = Commands.HandleCommand(executor, execReq.RawInput);
+                return true;
             }
 
-            var result = CommandDispatchCoordinator.DispatchAsync(request)
+            var result = CommandDispatchCoordinator.DispatchPreparedAsync(request)
                 .GetAwaiter()
                 .GetResult();
-            if (!result.Matched || result.Root is null || !TShockEndpointBindingFactory.IsTShockRoot(result.Root)) {
-                return false;
+            if (result.Matched && (!requireTShockRoot || (result.Root is not null && TShockEndpointBindingFactory.IsTShockRoot(result.Root)))) {
+                AuditDispatch(executor, request, result);
+                CommandSystem.GetOutcomeWriter<CommandExecutor>().Write(executor, result.Outcome ?? CommandOutcome.Empty);
+                succeeded = true;
+                return true;
             }
 
-            AuditDispatch(executor, request, result);
-            CommandSystem.GetOutcomeWriter<CommandExecutor>().Write(executor, result.Outcome ?? CommandOutcome.Empty);
-            return true;
+            succeeded = false;
+            return false;
         }
 
         public static bool HasDeclarativeRoot(string commandName) {

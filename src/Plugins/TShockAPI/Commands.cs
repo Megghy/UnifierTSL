@@ -182,30 +182,14 @@ namespace TShockAPI
                 return false;
             }
 
-            var endpointId = TSCommandBridge.ResolveEndpointId(executor);
-            var request = TSCommandBridge.CreateDispatchRequest(
+            if (TSCommandBridge.TryDispatchCommand(
                 executor,
-                endpointId,
                 text,
-                TSCommandBridge.IsSilentInvocation(text));
-
-            if (includeLegacy && CommandDispatchCoordinator.TryCreateExecutionRequest(request, out var execReq)
-                && RequiresLegacyDispatch(executor, execReq.InvokedRoot)) {
-                return HandleCommand(executor, execReq.RawInput);
-            }
-
-            var result = CommandDispatchCoordinator.DispatchAsync(request)
-                .GetAwaiter()
-                .GetResult();
-
-            if (result.Matched) {
-                TSCommandBridge.AuditDispatch(executor, request, result);
-                CommandSystem.GetOutcomeWriter<CommandExecutor>().Write(executor, result.Outcome ?? CommandOutcome.Empty);
-                return true;
-            }
-
-            if (includeLegacy && RequiresLegacyDispatch(executor, result.ExecutionRequest?.InvokedRoot)) {
-                return HandleCommand(executor, result.ExecutionRequest?.RawInput ?? text);
+                TSCommandBridge.IsSilentInvocation(text),
+                includeLegacy,
+                requireTShockRoot: false,
+                out bool legacySucceeded)) {
+                return legacySucceeded;
             }
 
             executor.SendErrorMessage(GetString("Invalid command entered. Type {0}help for a list of valid commands.", Specifier));
@@ -213,12 +197,27 @@ namespace TShockAPI
         }
 
         public static bool HandleCommand(CommandExecutor executor, string text) {
-            string cmdText = text[1..];
-            string cmdPrefix = text[0].ToString();
-            bool silent = false;
+            string trimmed = text.TrimStart();
+            if (string.IsNullOrEmpty(trimmed)) {
+                return false;
+            }
 
-            if (cmdPrefix == SilentSpecifier)
+            bool silent = false;
+            string cmdPrefix;
+            string cmdText;
+            if (!string.IsNullOrEmpty(SilentSpecifier) && trimmed.StartsWith(SilentSpecifier, StringComparison.Ordinal)) {
                 silent = true;
+                cmdPrefix = SilentSpecifier;
+                cmdText = trimmed[SilentSpecifier.Length..];
+            }
+            else if (!string.IsNullOrEmpty(Specifier) && trimmed.StartsWith(Specifier, StringComparison.Ordinal)) {
+                cmdPrefix = Specifier;
+                cmdText = trimmed[Specifier.Length..];
+            }
+            else {
+                cmdPrefix = string.Empty;
+                cmdText = trimmed;
+            }
 
             int index = -1;
             for (int i = 0; i < cmdText.Length; i++) {

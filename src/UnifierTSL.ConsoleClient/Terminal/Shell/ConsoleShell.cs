@@ -38,6 +38,7 @@ namespace UnifierTSL.Terminal.Shell
         private const int FooterViewportStabilizationMs = 180;
         private const int InteractiveKeyPollIntervalMs = 25;
         private const int FooterAnimationTicksPerSecond = 60;
+        private const int MaxDeferredLogWrites = 4096;
 
         public ConsoleShell()
             : this(new SystemConsoleTerminalDevice(), TimeProvider.System) {
@@ -81,6 +82,10 @@ namespace UnifierTSL.Terminal.Shell
             lock (sync) {
                 ThrowIfDisposed();
                 if (terminalDevice.IsSelectionActive) {
+                    if (deferredLogWrites.Count >= MaxDeferredLogWrites) {
+                        deferredLogWrites.Dequeue();
+                    }
+
                     deferredLogWrites.Enqueue((text, isAnsi));
                     deferredFooterDraw = true;
                     return;
@@ -91,23 +96,31 @@ namespace UnifierTSL.Terminal.Shell
         }
 
         private void AppendLogLocked(string text, bool isAnsi) {
+            WriteLogLocked(text, isAnsi);
 
+            if (IsInteractive && HasFooterTargetLocked()) {
+                int? anchorTopRow = hasOutputCursor ? ResolveFooterAnchorRow() : null;
+                DrawFooter(anchorTopRow);
+            }
+        }
+
+        private void WriteLogLocked(string text, bool isAnsi) {
             if (IsInteractive && renderer.FooterDrawn) {
                 renderer.ClearFooterArea(SupportsVirtualTerminal);
                 if (hasOutputCursor) {
                     int clearedTop = ClampRow(terminalDevice.Cursor.Top);
                     if (!outputLineContinuation) {
-                            // When previous output ended with a line terminator, the next write should
-                            // always restart from the cleared footer top row at column 0. This prevents
-                            // stale cached anchors from drifting into old footer rows.
-                            outputCursorTop = clearedTop;
-                            outputCursorLeft = 0;
+                        // When previous output ended with a line terminator, the next write should
+                        // always restart from the cleared footer top row at column 0. This prevents
+                        // stale cached anchors from drifting into old footer rows.
+                        outputCursorTop = clearedTop;
+                        outputCursorLeft = 0;
                     }
                     else if (outputCursorTop > clearedTop) {
-                            // Footer reservation near buffer bottom can trigger an implicit scroll.
-                            // Keep output anchor at/above the cleared row to avoid downward jumps
-                            // and phantom blank lines.
-                            outputCursorTop = clearedTop;
+                        // Footer reservation near buffer bottom can trigger an implicit scroll.
+                        // Keep output anchor at/above the cleared row to avoid downward jumps
+                        // and phantom blank lines.
+                        outputCursorTop = clearedTop;
                     }
                 }
             }
@@ -119,11 +132,18 @@ namespace UnifierTSL.Terminal.Shell
 
             string output = WriteText(text, isAnsi);
             CaptureOutputCursor(output);
+        }
 
-            if (IsInteractive && HasFooterTargetLocked()) {
-                int? anchorTopRow = hasOutputCursor ? ResolveFooterAnchorRow() : null;
-                DrawFooter(anchorTopRow);
+        private bool DrainDeferredLogsLocked() {
+            if (deferredLogWrites.Count == 0) {
+                return false;
             }
+
+            while (deferredLogWrites.TryDequeue(out var deferred)) {
+                WriteLogLocked(deferred.Text, deferred.IsAnsi);
+            }
+
+            return true;
         }
 
         internal void UpdateStatusFrame(TerminalSurfaceRuntimeFrame frame) {
@@ -458,6 +478,8 @@ namespace UnifierTSL.Terminal.Shell
                 disposed = true;
                 interactionFrameActive = false;
                 readInProgress = false;
+                deferredFooterDraw = false;
+                deferredLogWrites.Clear();
                 renderer.Reset();
                 disposeTimer = true;
             }
@@ -560,8 +582,15 @@ namespace UnifierTSL.Terminal.Shell
 
             deferredFooterDraw = false;
 
-            while (deferredLogWrites.TryDequeue(out var deferred)) {
-                AppendLogLocked(deferred.Text, deferred.IsAnsi);
+            if (DrainDeferredLogsLocked() && hasOutputCursor) {
+                anchorTopRow = ResolveFooterAnchorRow();
+            }
+
+            if (!HasFooterTargetLocked()) {
+                if (renderer.FooterDrawn) {
+                    renderer.ClearFooterArea(SupportsVirtualTerminal);
+                }
+                return;
             }
 
             if (ShouldDelayFooterLocked()) {
@@ -695,12 +724,13 @@ namespace UnifierTSL.Terminal.Shell
             lock (sync) {
                 footerAnimationTick += 1;
                 bool hasFooterTarget = HasFooterTargetLocked();
-                if (disposed || !IsInteractive || (!renderer.FooterDrawn && !hasFooterTarget)) {
+                bool hasDeferredWork = deferredFooterDraw || deferredLogWrites.Count > 0;
+                if (disposed || !IsInteractive || (!renderer.FooterDrawn && !hasFooterTarget && !hasDeferredWork)) {
                     return;
                 }
 
                 long animationTick = footerAnimationTick;
-                bool shouldRedraw = deferredFooterDraw || !renderer.FooterDrawn && hasFooterTarget;
+                bool shouldRedraw = hasDeferredWork || (!renderer.FooterDrawn && hasFooterTarget);
                 if (renderer.FooterDrawn && renderer.RequiresViewportRefresh()) {
                     shouldRedraw = true;
                 }
@@ -734,7 +764,12 @@ namespace UnifierTSL.Terminal.Shell
         private void EndInteractionFrameLocked() {
             interactionFrameActive = false;
             readInProgress = false;
-            renderer.ClearFooterArea(SupportsVirtualTerminal);
+            if (terminalDevice.IsSelectionActive) {
+                deferredFooterDraw = true;
+            }
+            else {
+                renderer.ClearFooterArea(SupportsVirtualTerminal);
+            }
             currentFrame = TerminalSurfaceRuntimeFrame.Empty;
             inputIndicator = null;
             if (statusBar is not null) {

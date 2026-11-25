@@ -89,7 +89,8 @@ namespace UnifierTSL.Events.Handlers
         }
 
         internal static bool IsExpectedDedicatedInputShutdown(ObjectDisposedException exception) =>
-            exception.ObjectName == nameof(ServerConsoleReadScope);
+            exception.ObjectName is nameof(ServerConsoleReadScope)
+                || string.Equals(exception.ObjectName, typeof(ServerConsoleReadScope).FullName, StringComparison.Ordinal);
 
         private static void HandleDedicatedInput(
             On.Terraria.MainSystemContext.orig_startDedInputCallBack orig,

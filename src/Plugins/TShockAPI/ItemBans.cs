@@ -79,7 +79,7 @@ namespace TShockAPI
                 // Untaint now, re-taint if they fail the check.
                 UnTaint(player);
 
-                if (DataModel.ItemBans.Count == 0)
+                if (!DataModel.HasBans)
                     continue;
 
                 // If player isn't disabled for not being logged in, check for any banned items in use.
@@ -148,7 +148,7 @@ namespace TShockAPI
         }
 
         private void OnPlayerUpdate(ref ReceivePacketEvent<PlayerControls> args) {
-            if (DataModel.ItemBans.Count == 0)
+            if (!DataModel.HasBans)
                 return;
 
             var player = TShock.Players[args.ReceiveFrom.ID];
@@ -171,7 +171,7 @@ namespace TShockAPI
         }
 
         private void OnChestItemChange(ref ReceivePacketEvent<SyncChestItem> args) {
-            if (DataModel.ItemBans.Count == 0)
+            if (!DataModel.HasBans)
                 return;
 
             var player = TShock.Players[args.ReceiveFrom.ID];
@@ -190,7 +190,7 @@ namespace TShockAPI
         }
 
         private void OnTileEdit(ref ReceivePacketEvent<TileChange> args) {
-            if (DataModel.ItemBans.Count == 0)
+            if (!DataModel.HasBans)
                 return;
 
             var action = args.Packet.ChangeType;

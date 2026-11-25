@@ -156,7 +156,7 @@ namespace UnifierTSL.Surface.Status
                 lastSignature = "<unset>";
             }
 
-            lastPeriodicComposeTimestamp = 0;
+            Volatile.Write(ref lastPeriodicComposeTimestamp, 0);
         }
 
         public void Dispose() {
@@ -203,12 +203,12 @@ namespace UnifierTSL.Surface.Status
                     document = ComposeCurrentDocument();
                 }
                 else if (!TryGetCurrentDocumentIfChanged(out document)) {
-                    lastPeriodicComposeTimestamp = Environment.TickCount64;
+                    Volatile.Write(ref lastPeriodicComposeTimestamp, Environment.TickCount64);
                     return;
                 }
 
                 sequence = Interlocked.Increment(ref nextSequence);
-                lastPeriodicComposeTimestamp = Environment.TickCount64;
+                Volatile.Write(ref lastPeriodicComposeTimestamp, Environment.TickCount64);
             }
 
             sink(sequence, document);
@@ -219,7 +219,7 @@ namespace UnifierTSL.Surface.Status
                 return false;
             }
 
-            long last = lastPeriodicComposeTimestamp;
+            long last = Volatile.Read(ref lastPeriodicComposeTimestamp);
             return last != 0 && Environment.TickCount64 - last < IdleRefreshIntervalMs;
         }
 
@@ -259,8 +259,16 @@ namespace UnifierTSL.Surface.Status
                 switch (node) {
                     case TextProjectionNodeState text:
                         AppendBlock(builder, text.State.Content);
+                        if (text.State.Animation is { } animation) {
+                            builder.Append('\u001e').Append(animation.FrameStepTicks);
+                            foreach (var frame in animation.Frames) {
+                                builder.Append('\u001e');
+                                AppendBlock(builder, frame);
+                            }
+                        }
                         break;
                     case DetailProjectionNodeState detail:
+                        builder.Append(detail.State.ContextItemId).Append('|');
                         AppendBlock(builder, detail.State.Heading);
                         builder.Append('|');
                         AppendBlock(builder, detail.State.Summary);
@@ -272,6 +280,9 @@ namespace UnifierTSL.Surface.Status
                     case ContainerProjectionNodeState container:
                         builder.Append(container.State.IsVisible);
                         break;
+                    default:
+                        builder.Append(System.Text.Json.JsonSerializer.Serialize(node));
+                        break;
                 }
 
                 builder.Append('\n');
@@ -282,8 +293,9 @@ namespace UnifierTSL.Surface.Status
 
         private static void AppendBlock(StringBuilder builder, ProjectionTextBlock block) {
             foreach (var line in block.Lines) {
+                builder.Append(line.Style?.Key).Append('\u001f');
                 foreach (var span in line.Spans) {
-                    builder.Append(span.Text);
+                    builder.Append(span.Style?.Key).Append('\u001f').Append(span.Text).Append('\u001f');
                 }
 
                 builder.Append('\n');

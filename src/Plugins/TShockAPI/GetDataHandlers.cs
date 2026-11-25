@@ -824,26 +824,25 @@ namespace TShockAPI
 
             short type = (short)projectile.type;
 
-            if (tsPlayer.IgnoreProjectileContentChecks)
-                return;
-
-            if (type == ProjectileID.Tombstone) {
-                server.Log.Debug(GetString("GetDataHandlers / HandleProjectileKill rejected tombstone {0}", tsPlayer.Name));
-                tsPlayer.RemoveProjectile(key);
-                { args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true; return; }
-            }
-
-            if (TShock.ProjectileBans.ProjectileIsBanned(type, tsPlayer) && !setting.IgnoreProjKill) {
-                // According to 2012 deathmax, this is a workaround to fix skeletron prime issues
-                // https://github.com/Pryaxis/TShock/commit/a5aa9231239926f361b7246651e32144bbf28dda
-                if (type == ProjectileID.Bomb || type == ProjectileID.DeathLaser) {
-                    server.Log.Debug(GetString("GetDataHandlers / HandleProjectileKill permitted skeletron prime exemption {0}", tsPlayer.Name));
-                    server.Log.Debug(GetString("If this was not skeletron prime related, please report to TShock what happened."));
-                    return;
+            if (!tsPlayer.IgnoreProjectileContentChecks) {
+                if (type == ProjectileID.Tombstone) {
+                    server.Log.Debug(GetString("GetDataHandlers / HandleProjectileKill rejected tombstone {0}", tsPlayer.Name));
+                    tsPlayer.RemoveProjectile(key);
+                    { args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true; return; }
                 }
-                server.Log.Debug(GetString("GetDataHandlers / HandleProjectileKill rejected banned projectile {0}", tsPlayer.Name));
-                tsPlayer.RemoveProjectile(key);
-                { args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true; return; }
+
+                if (TShock.ProjectileBans.ProjectileIsBanned(type, tsPlayer) && !setting.IgnoreProjKill) {
+                    // According to 2012 deathmax, this is a workaround to fix skeletron prime issues
+                    // https://github.com/Pryaxis/TShock/commit/a5aa9231239926f361b7246651e32144bbf28dda
+                    if (type == ProjectileID.Bomb || type == ProjectileID.DeathLaser) {
+                        server.Log.Debug(GetString("GetDataHandlers / HandleProjectileKill permitted skeletron prime exemption {0}", tsPlayer.Name));
+                        server.Log.Debug(GetString("If this was not skeletron prime related, please report to TShock what happened."));
+                        return;
+                    }
+                    server.Log.Debug(GetString("GetDataHandlers / HandleProjectileKill rejected banned projectile {0}", tsPlayer.Name));
+                    tsPlayer.RemoveProjectile(key);
+                    { args.HandleMode = PacketHandleMode.Cancel; args.StopPropagation = true; return; }
+                }
             }
 
             tsPlayer.LastKilledProjectile = type;

@@ -50,9 +50,10 @@ namespace TShockAPI.Configuration
             ApplyLoaded(settings);
         }
 
-        /// <summary>从磁盘重新加载全局配置，重建 per-server 缓存，并通知订阅者。</summary>
+        /// <summary>从磁盘重新加载全局配置与 per-server override，重建 per-server 缓存，并通知订阅者。</summary>
         public void Reload() {
             defaultSettingHandle.Reload();
+            serverSpecificSettingHandle.Reload();
             ApplyLoaded(defaultSettingHandle.Request()
                 ?? throw new InvalidOperationException($"Unable to load default settings for {FilePath}"));
         }

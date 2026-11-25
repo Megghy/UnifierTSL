@@ -291,24 +291,29 @@ namespace UnifierTSL
                 Directory.CreateDirectory(logsDir);
                 var crashText = $"[{timestamp}] {fullMessage}\n" + new string('-', 80) + "\n";
                 File.AppendAllText(Path.Combine(logsDir, "crash.log"), crashText);
-                File.AppendAllText(Path.Combine(logsDir, "latest-crash.log"), crashText);
+                File.WriteAllText(Path.Combine(logsDir, "latest-crash.log"), crashText);
             }
             catch { }
 
-            // 3. 记入核心持久化日志并强制同步刷盘
+            // 3. 记入核心持久化日志并刷盘；终止时走带超时的停止流程，避免持锁永久卡死
             try {
                 Logger.Critical(fullMessage, ex: ex, category: "Crash");
             }
             catch { }
 
-            try {
-                lock (durableWriterGate) {
-                    durableWriter?.FlushSync();
-                }
+            if (isTerminating) {
+                DisposeDurableWriter(reportTimeout: false);
             }
-            catch { }
-
-            DisposeDurableWriter(reportTimeout: false);
+            else {
+                try {
+                    AsyncDurableLogWriter? writer;
+                    lock (durableWriterGate) {
+                        writer = durableWriter;
+                    }
+                    writer?.FlushSync();
+                }
+                catch { }
+            }
         }
 
         private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e) {

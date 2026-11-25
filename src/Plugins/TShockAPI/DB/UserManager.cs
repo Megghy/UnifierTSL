@@ -299,7 +299,7 @@ namespace TShockAPI.DB
         public List<UserAccount> GetUserAccounts(int offset = 0, int limit = 0) {
             try {
                 using var db = _dbFactory();
-                var query = db.GetTable<UserTable>().AsQueryable();
+                IQueryable<UserTable> query = db.GetTable<UserTable>().OrderBy(u => u.ID);
                 if (offset > 0)
                     query = query.Skip(offset);
                 if (limit > 0)

@@ -1,5 +1,6 @@
 using NuGet.Protocol.Plugins;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
@@ -22,6 +23,8 @@ namespace UnifierTSL
 {
     public class UnifiedServerCoordinator
     {
+        internal static TimeSpan PendingConnectionTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
         private unsafe class PendingConnection(int index)
         {
             public readonly int Index = index;
@@ -29,26 +32,33 @@ namespace UnifierTSL
             public byte[] readBuffer = new byte[1024 * 8];
             public int totalData = 0;
             public string? ReceivedUUID = "";
+            public long ConnectedAtTimestamp = Stopwatch.GetTimestamp();
             public void Reset(ISocket socket) {
-                player.active = false;
-                players[Index] = player;
-
                 RemoteClient client = globalClients[Index];
-                client.ClientUUID = ReceivedUUID = null;
-                client.Name = player.name = string.Empty;
+                ISocket? previousSocket;
+                lock (client) {
+                    player.active = false;
+                    players[Index] = player;
 
-                totalData = 0;
-                client.Data.Clear();
-                client.TimeOutTimer = 0;
-                client.State = 0;
-                client._isReading = false;
-                client.PendingTermination = false;
-                client.PendingTerminationApproved = false;
-                client.SpamClear();
-                client.IsActive = false;
+                    client.ClientUUID = ReceivedUUID = null;
+                    client.Name = player.name = string.Empty;
 
-                client.Socket?.Close();
-                client.Socket = socket;
+                    totalData = 0;
+                    Volatile.Write(ref ConnectedAtTimestamp, Stopwatch.GetTimestamp());
+                    client.Data.Clear();
+                    client.TimeOutTimer = 0;
+                    client.State = 0;
+                    client._isReading = false;
+                    client.PendingTermination = false;
+                    client.PendingTerminationApproved = false;
+                    client.SpamClear();
+                    client.IsActive = false;
+
+                    previousSocket = client.Socket;
+                    client.Socket = socket;
+                }
+
+                previousSocket?.Close();
             }
             public void Update(RemoteClient client) {
                 if (!client.IsActive) {
@@ -62,28 +72,37 @@ namespace UnifierTSL
 
                 try {
                     if (client.Socket.IsDataAvailable()) {
+                        ISocket expectedSocket = client.Socket;
                         client._isReading = true;
-                        client.Socket.AsyncReceive(client.ReadBuffer, 0, client.ReadBuffer.Length, delegate (object state, int length) {
-                            if (length == 0) {
-                                client.PendingTermination = true;
-                            }
-                            else {
-                                try {
-                                    Buffer.BlockCopy(client.ReadBuffer, 0, readBuffer, totalData, length);
-                                    totalData += length;
-                                    ProcessBytes(client);
+                        expectedSocket.AsyncReceive(client.ReadBuffer, 0, client.ReadBuffer.Length, delegate (object state, int length) {
+                            lock (client) {
+                                if (!ReferenceEquals(client.Socket, expectedSocket)) {
+                                    return;
                                 }
-                                catch {
+                                if (length == 0) {
                                     client.PendingTermination = true;
+                                    client.PendingTerminationApproved = true;
                                 }
-                            }
+                                else {
+                                    try {
+                                        Buffer.BlockCopy(client.ReadBuffer, 0, readBuffer, totalData, length);
+                                        totalData += length;
+                                        ProcessBytes(client);
+                                    }
+                                    catch {
+                                        client.PendingTermination = true;
+                                        client.PendingTerminationApproved = true;
+                                    }
+                                }
 
-                            client._isReading = false;
+                                client._isReading = false;
+                            }
                         });
                     }
                 }
                 catch {
                     client.PendingTermination = true;
+                    client.PendingTerminationApproved = true;
                 }
             }
             private void ProcessBytes(RemoteClient client) {
@@ -100,6 +119,7 @@ namespace UnifierTSL
 
                         if (packetLength < 3 || packetLength > 1000) {
                             client.PendingTermination = true;
+                            client.PendingTerminationApproved = true;
                             return;
                         }
 
@@ -156,6 +176,12 @@ namespace UnifierTSL
                 }
             }
 
+            private static void KickIfNotPendingTermination(LocalClientSender sender, RemoteClient client) {
+                if (!client.PendingTermination || !client.PendingTerminationApproved) {
+                    sender.Kick(NetworkText.FromLiteral(GetString("You are not allowed to join this server.")));
+                }
+            }
+
             private void ProcessPacket(int packetStart, int contentLength) {
                 LocalClientSender sender = clientSenders[Index];
                 RemoteClient client = globalClients[Index];
@@ -168,6 +194,7 @@ namespace UnifierTSL
                                 ClientHello msg = new(ref readPtr, endPtr);
                                 UnifierApi.EventHub.Netplay.ConnectEvent.Invoke(new Connect(client, msg.Version), out bool handled);
                                 if (handled) {
+                                    KickIfNotPendingTermination(sender, client);
                                     return;
                                 }
                                 string expectedVersion = "Terraria" + Main.curRelease;
@@ -235,9 +262,7 @@ namespace UnifierTSL
 
                                 UnifierApi.EventHub.Netplay.ReceiveFullClientInfoEvent.Invoke(new(client, player, sender), out bool h);
                                 if (h) {
-                                    if (!client.PendingTermination || !client.PendingTerminationApproved) {
-                                        sender.Kick(NetworkText.FromLiteral(GetString("You are not allowed to join this server.")));
-                                    }
+                                    KickIfNotPendingTermination(sender, client);
                                     return;
                                 }
 
@@ -311,12 +336,9 @@ namespace UnifierTSL
         public static Func<ServerContext?>? DefaultServerProvider { get; set; }
 
         public static ServerContext? GetDefaultServer() {
-            try {
-                var custom = DefaultServerProvider?.Invoke();
-                if (custom is not null)
-                    return custom;
-            }
-            catch { }
+            var custom = DefaultServerProvider?.Invoke();
+            if (custom is not null)
+                return custom;
 
             var list = servers;
             return list.FirstOrDefault(s => s.IsRunning && (string.Equals(s.Name, "Boss", StringComparison.OrdinalIgnoreCase) || string.Equals(s.Name, "Main", StringComparison.OrdinalIgnoreCase)))
@@ -671,18 +693,21 @@ namespace UnifierTSL
                     ServerContext? server = GetClientCurrentlyServer(i);
                     if (server is not null) {
                         if (client.PendingTermination) {
-                            if (client.PendingTerminationApproved) {
+                            if (client.PendingTerminationApproved || !server.IsRunning) {
                                 client.Reset(server);
                                 server.NetMessage.SyncDisconnectedPlayer(i);
 
                                 bool active = server.Main.player[i].active;
                                 server.Main.player[i].active = false;
-                                IdlePlayerSlotReleased?.Invoke(server.Main.player[i]);
                                 if (active) {
                                     server.Player.Hooks.PlayerDisconnect(i);
                                 }
+                                IdlePlayerSlotReleased?.Invoke(server.Main.player[i]);
 
                                 client.Socket = null;
+                                if (!server.IsRunning) {
+                                    SetClientCurrentlyServer(i, null);
+                                }
                                 // SetClientCurrentlyServer(i, main);
                             }
                             else {
@@ -705,16 +730,28 @@ namespace UnifierTSL
                         }
                     }
                     else {
+                        ISocket? observedSocket = client.Socket;
                         if (client.PendingTermination) {
-                            if (client.PendingTerminationApproved) {
-                                ResetUnboundClientState(client);
-                            }
+                            ResetUnboundClientState(client, observedSocket);
+                            continue;
                         }
                         if (client.IsConnected()) {
+                            if (Stopwatch.GetElapsedTime(Volatile.Read(ref pendingConnects[i].ConnectedAtTimestamp)) >= PendingConnectionTimeout) {
+                                Logger.Warning(
+                                    category: "PendingConnection",
+                                    message: GetParticularString("{0} is client IP address, {1} is client slot index",
+                                        $"Handshake timed out for unbound client slot {i} ({observedSocket?.GetRemoteAddress()}). Closing connection."));
+                                ResetUnboundClientState(client, observedSocket);
+                                continue;
+                            }
                             activeConnections += 1;
                             lock (client) {
                                 pendingConnects[i].Update(client);
                             }
+                            continue;
+                        }
+                        if (observedSocket is not null) {
+                            ResetUnboundClientState(client, observedSocket);
                             continue;
                         }
                     }
@@ -748,24 +785,39 @@ namespace UnifierTSL
 
         // Used only for pre-routing cleanup when the client is not bound to any server context.
         // Routed clients must use the standard server-bound reset path instead.
-        static void ResetUnboundClientState(RemoteClient client) {
-            client.Data.Clear();
+        static void ResetUnboundClientState(RemoteClient client, ISocket? expectedSocket = null) {
+            ISocket? socketToClose;
+            lock (client) {
+                if (expectedSocket is not null && !ReferenceEquals(client.Socket, expectedSocket)) {
+                    return;
+                }
 
-            client.ClientUUID = null;
+                client.Data.Clear();
 
-            client.TimeOutTimer = 0;
-            client.State = 0;
-            client._isReading = false;
-            client.PendingTermination = false;
-            client.PendingTerminationApproved = false;
-            client.SpamClear();
-            client.IsActive = false;
+                client.ClientUUID = null;
+                client.Name = string.Empty;
 
-            var plr = players[client.Id] = new();
-            plr.active = false;
+                PendingConnection pending = pendingConnects[client.Id];
+                pending.totalData = 0;
+                pending.ReceivedUUID = null;
 
-            globalMsgBuffers[client.Id].Reset();
-            client.Socket?.Close();
+                client.TimeOutTimer = 0;
+                client.State = 0;
+                client._isReading = false;
+                client.PendingTermination = false;
+                client.PendingTerminationApproved = false;
+                client.SpamClear();
+                client.IsActive = false;
+
+                var plr = players[client.Id] = new();
+                plr.active = false;
+
+                globalMsgBuffers[client.Id].Reset();
+                socketToClose = client.Socket;
+                client.Socket = null;
+            }
+
+            socketToClose?.Close();
         }
 
         public static int GetClientSpace() {

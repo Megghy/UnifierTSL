@@ -109,15 +109,11 @@ namespace UnifierTSL.Performance
                         server.Dispatcher.DrainPending();
                     }
 
-                    var frameElapsedMs = frameTimer.Elapsed.TotalMilliseconds - nowMs;
                     var budgetedSleepMs = Math.Max(0d, nextFrameAtMs - frameTimer.Elapsed.TotalMilliseconds);
                     data.CurrentFrameData.SetBudget(
                         Math.Max(0d, nowMs - scheduledFrameAtMs),
                         idealFrameTimeMs,
                         budgetedSleepMs);
-
-                    if (frameElapsedMs <= 0d)
-                        Thread.Sleep(0);
                 }
             }
 

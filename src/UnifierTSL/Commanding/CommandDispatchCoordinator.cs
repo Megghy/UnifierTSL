@@ -87,13 +87,25 @@ namespace UnifierTSL.Commanding
             return true;
         }
 
-        public static async Task<CommandDispatchResult> DispatchAsync(
-            CommandDispatchRequest request,
-            CancellationToken cancellationToken = default) {
+        public static CommandDispatchRequest PrepareRequest(CommandDispatchRequest request) {
             ArgumentNullException.ThrowIfNull(request);
 
             request = ApplyInputPreprocessors(request);
             CommandReceived?.Invoke(request);
+            return request;
+        }
+
+        public static Task<CommandDispatchResult> DispatchAsync(
+            CommandDispatchRequest request,
+            CancellationToken cancellationToken = default) {
+            request = PrepareRequest(request);
+            return DispatchPreparedAsync(request, cancellationToken);
+        }
+
+        public static async Task<CommandDispatchResult> DispatchPreparedAsync(
+            CommandDispatchRequest request,
+            CancellationToken cancellationToken = default) {
+            ArgumentNullException.ThrowIfNull(request);
 
             if (!TryCreateExecutionRequest(request, out var executionRequest)) {
                 return new CommandDispatchResult {

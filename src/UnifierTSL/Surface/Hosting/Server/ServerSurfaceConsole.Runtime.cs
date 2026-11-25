@@ -15,7 +15,7 @@ public abstract partial class ServerSurfaceConsole
     private ServerConsoleReadScope? consoleReadScope;
     private StatusProjectionRuntime? statusRuntime;
     private bool runtimeInitialized;
-    private bool isDisposed;
+    private int isDisposed;
     private ConsoleColor cachedBackgroundColor = System.Console.BackgroundColor;
     private ConsoleColor cachedForegroundColor = System.Console.ForegroundColor;
     private Encoding cachedInputEncoding = System.Console.InputEncoding;
@@ -118,7 +118,7 @@ public abstract partial class ServerSurfaceConsole
     }
 
     public override void Clear() {
-        if (isDisposed) {
+        if (Volatile.Read(ref isDisposed) != 0) {
             return;
         }
         Session.PublishSurfaceHostOperation(SurfaceHostOperations.Clear());
@@ -148,10 +148,9 @@ public abstract partial class ServerSurfaceConsole
 
     public override void Dispose(bool disposing) {
         if (disposing) {
-            if (isDisposed) {
+            if (Interlocked.Exchange(ref isDisposed, 1) != 0) {
                 return;
             }
-            isDisposed = true;
 
             if (runtimeInitialized) {
                 try {
@@ -265,6 +264,9 @@ public abstract partial class ServerSurfaceConsole
         T value,
         Func<T, SurfaceHostOperation> createOperation) {
         cachedValue = value;
+        if (Volatile.Read(ref isDisposed) != 0) {
+            return;
+        }
         Session.PublishSurfaceHostOperation(createOperation(value));
     }
 
@@ -277,7 +279,7 @@ public abstract partial class ServerSurfaceConsole
     }
 
     private void PublishTextOutput(StreamPayloadKind kind, string? value, bool wrapCurrentColors) {
-        if (isDisposed) {
+        if (Volatile.Read(ref isDisposed) != 0) {
             return;
         }
 

@@ -335,97 +335,89 @@ namespace TShockAPI.DB
         }
 
         private bool InsertPlayerDataCore(TSPlayer player, PlayerData data) {
-            var character = new Character {
-                AccountId = player.Account.ID,
-                Health = data.health,
-                MaxHealth = data.maxHealth,
-                Mana = data.mana,
-                MaxMana = data.maxMana,
-                Inventory = string.Join("~", data.inventory),
-                extraSlot = data.extraSlot,
-                spawnX = data.spawnX,
-                spawnY = data.spawnY,
-                skinVariant = data.skinVariant,
-                hair = data.hair,
-                hairDye = data.hairDye,
-                hairColor = Utils.EncodeColor(data.hairColor),
-                pantsColor = Utils.EncodeColor(data.pantsColor),
-                shirtColor = Utils.EncodeColor(data.shirtColor),
-                underShirtColor = Utils.EncodeColor(data.underShirtColor),
-                shoeColor = Utils.EncodeColor(data.shoeColor),
-                hideVisuals = Utils.EncodeBoolArray(data.hideVisuals),
-                skinColor = Utils.EncodeColor(data.skinColor),
-                eyeColor = Utils.EncodeColor(data.eyeColor),
-                questsCompleted = data.questsCompleted,
-                usingBiomeTorches = data.usingBiomeTorches,
-                happyFunTorchTime = data.happyFunTorchTime,
-                unlockedBiomeTorches = data.unlockedBiomeTorches,
-                currentLoadoutIndex = data.currentLoadoutIndex,
-                ateArtisanBread = data.ateArtisanBread,
-                usedAegisCrystal = data.usedAegisCrystal,
-                usedAegisFruit = data.usedAegisFruit,
-                usedArcaneCrystal = data.usedArcaneCrystal,
-                usedGalaxyPearl = data.usedGalaxyPearl,
-                usedGummyWorm = data.usedGummyWorm,
-                usedAmbrosia = data.usedAmbrosia,
-                unlockedSuperCart = data.unlockedSuperCart,
-                enabledSuperCart = data.enabledSuperCart,
-                deathsPVE = data.deathsPVE,
-                deathsPVP = data.deathsPVP,
-                voiceVariant = data.voiceVariant,
-                voicePitchOffset = data.voicePitchOffset,
-                team = data.team
-            };
+            var character = BuildCharacterBase(player.Account.ID, data);
+            character.spawnX = data.spawnX;
+            character.spawnY = data.spawnY;
+            character.skinVariant = data.skinVariant;
+            character.hair = data.hair;
+            character.hairDye = data.hairDye;
+            character.hairColor = Utils.EncodeColor(data.hairColor);
+            character.pantsColor = Utils.EncodeColor(data.pantsColor);
+            character.shirtColor = Utils.EncodeColor(data.shirtColor);
+            character.underShirtColor = Utils.EncodeColor(data.underShirtColor);
+            character.shoeColor = Utils.EncodeColor(data.shoeColor);
+            character.hideVisuals = Utils.EncodeBoolArray(data.hideVisuals);
+            character.skinColor = Utils.EncodeColor(data.skinColor);
+            character.eyeColor = Utils.EncodeColor(data.eyeColor);
+            character.questsCompleted = data.questsCompleted;
+            character.usingBiomeTorches = data.usingBiomeTorches;
+            character.happyFunTorchTime = data.happyFunTorchTime;
+            character.unlockedBiomeTorches = data.unlockedBiomeTorches;
+            character.currentLoadoutIndex = data.currentLoadoutIndex;
+            character.ateArtisanBread = data.ateArtisanBread;
+            character.usedAegisCrystal = data.usedAegisCrystal;
+            character.usedAegisFruit = data.usedAegisFruit;
+            character.usedArcaneCrystal = data.usedArcaneCrystal;
+            character.usedGalaxyPearl = data.usedGalaxyPearl;
+            character.usedGummyWorm = data.usedGummyWorm;
+            character.usedAmbrosia = data.usedAmbrosia;
+            character.unlockedSuperCart = data.unlockedSuperCart;
+            character.enabledSuperCart = data.enabledSuperCart;
+            character.voiceVariant = data.voiceVariant;
+            character.voicePitchOffset = data.voicePitchOffset;
+            character.team = data.team;
 
             return SaveCharacter(player, character);
         }
 
         private bool InsertLivePlayerDataCore(TSPlayer player) {
-            var data = player.PlayerData;
-            var character = new Character {
-                AccountId = player.Account.ID,
-                Health = data.health,
-                MaxHealth = data.maxHealth,
-                Mana = data.mana,
-                MaxMana = data.maxMana,
-                Inventory = string.Join("~", data.inventory),
-                extraSlot = data.extraSlot,
-                spawnX = player.TPlayer.SpawnX,
-                spawnY = player.TPlayer.SpawnY,
-                skinVariant = player.TPlayer.skinVariant,
-                hair = player.TPlayer.hair,
-                hairDye = player.TPlayer.hairDye,
-                hairColor = Utils.EncodeColor(player.TPlayer.hairColor),
-                pantsColor = Utils.EncodeColor(player.TPlayer.pantsColor),
-                shirtColor = Utils.EncodeColor(player.TPlayer.shirtColor),
-                underShirtColor = Utils.EncodeColor(player.TPlayer.underShirtColor),
-                shoeColor = Utils.EncodeColor(player.TPlayer.shoeColor),
-                hideVisuals = Utils.EncodeBoolArray(player.TPlayer.hideVisibleAccessory),
-                skinColor = Utils.EncodeColor(player.TPlayer.skinColor),
-                eyeColor = Utils.EncodeColor(player.TPlayer.eyeColor),
-                questsCompleted = player.TPlayer.anglerQuestsFinished,
-                usingBiomeTorches = player.TPlayer.UsingBiomeTorches ? 1 : 0,
-                happyFunTorchTime = player.TPlayer.happyFunTorchTime ? 1 : 0,
-                unlockedBiomeTorches = player.TPlayer.unlockedBiomeTorches ? 1 : 0,
-                currentLoadoutIndex = player.TPlayer.CurrentLoadoutIndex,
-                ateArtisanBread = player.TPlayer.ateArtisanBread ? 1 : 0,
-                usedAegisCrystal = player.TPlayer.usedAegisCrystal ? 1 : 0,
-                usedAegisFruit = player.TPlayer.usedAegisFruit ? 1 : 0,
-                usedArcaneCrystal = player.TPlayer.usedArcaneCrystal ? 1 : 0,
-                usedGalaxyPearl = player.TPlayer.usedGalaxyPearl ? 1 : 0,
-                usedGummyWorm = player.TPlayer.usedGummyWorm ? 1 : 0,
-                usedAmbrosia = player.TPlayer.usedAmbrosia ? 1 : 0,
-                unlockedSuperCart = player.TPlayer.unlockedSuperCart ? 1 : 0,
-                enabledSuperCart = player.TPlayer.enabledSuperCart ? 1 : 0,
-                deathsPVE = data.deathsPVE,
-                deathsPVP = data.deathsPVP,
-                voiceVariant = player.TPlayer.voiceVariant,
-                voicePitchOffset = player.TPlayer.voicePitchOffset,
-                team = player.TPlayer.team
-            };
+            var character = BuildCharacterBase(player.Account.ID, player.PlayerData);
+            var tPlayer = player.TPlayer;
+            character.spawnX = tPlayer.SpawnX;
+            character.spawnY = tPlayer.SpawnY;
+            character.skinVariant = tPlayer.skinVariant;
+            character.hair = tPlayer.hair;
+            character.hairDye = tPlayer.hairDye;
+            character.hairColor = Utils.EncodeColor(tPlayer.hairColor);
+            character.pantsColor = Utils.EncodeColor(tPlayer.pantsColor);
+            character.shirtColor = Utils.EncodeColor(tPlayer.shirtColor);
+            character.underShirtColor = Utils.EncodeColor(tPlayer.underShirtColor);
+            character.shoeColor = Utils.EncodeColor(tPlayer.shoeColor);
+            character.hideVisuals = Utils.EncodeBoolArray(tPlayer.hideVisibleAccessory);
+            character.skinColor = Utils.EncodeColor(tPlayer.skinColor);
+            character.eyeColor = Utils.EncodeColor(tPlayer.eyeColor);
+            character.questsCompleted = tPlayer.anglerQuestsFinished;
+            character.usingBiomeTorches = tPlayer.UsingBiomeTorches ? 1 : 0;
+            character.happyFunTorchTime = tPlayer.happyFunTorchTime ? 1 : 0;
+            character.unlockedBiomeTorches = tPlayer.unlockedBiomeTorches ? 1 : 0;
+            character.currentLoadoutIndex = tPlayer.CurrentLoadoutIndex;
+            character.ateArtisanBread = tPlayer.ateArtisanBread ? 1 : 0;
+            character.usedAegisCrystal = tPlayer.usedAegisCrystal ? 1 : 0;
+            character.usedAegisFruit = tPlayer.usedAegisFruit ? 1 : 0;
+            character.usedArcaneCrystal = tPlayer.usedArcaneCrystal ? 1 : 0;
+            character.usedGalaxyPearl = tPlayer.usedGalaxyPearl ? 1 : 0;
+            character.usedGummyWorm = tPlayer.usedGummyWorm ? 1 : 0;
+            character.usedAmbrosia = tPlayer.usedAmbrosia ? 1 : 0;
+            character.unlockedSuperCart = tPlayer.unlockedSuperCart ? 1 : 0;
+            character.enabledSuperCart = tPlayer.enabledSuperCart ? 1 : 0;
+            character.voiceVariant = tPlayer.voiceVariant;
+            character.voicePitchOffset = tPlayer.voicePitchOffset;
+            character.team = tPlayer.team;
 
             return SaveCharacter(player, character);
         }
+
+        private static Character BuildCharacterBase(int accountId, PlayerData data) => new() {
+            AccountId = accountId,
+            Health = data.health,
+            MaxHealth = data.maxHealth,
+            Mana = data.mana,
+            MaxMana = data.maxMana,
+            Inventory = string.Join("~", data.inventory),
+            extraSlot = data.extraSlot,
+            deathsPVE = data.deathsPVE,
+            deathsPVP = data.deathsPVP
+        };
 
         private bool SaveCharacter(TSPlayer player, Character character) {
             try {

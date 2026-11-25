@@ -127,26 +127,7 @@ namespace TShockAPI.Commanding.V2
             var tsPlayer = context.Player!;
             tsPlayer.tempGroup = new SuperAdminGroup();
             try {
-                var request = TSCommandBridge.CreateDispatchRequest(
-                    context.Executor,
-                    TShockCommandEndpoints.Player,
-                    nestedCommand,
-                    TSCommandBridge.IsSilentInvocation(nestedCommand));
-                var result = CommandDispatchCoordinator.DispatchAsync(request)
-                    .GetAwaiter()
-                    .GetResult();
-                if (result.Matched) {
-                    TSCommandBridge.AuditDispatch(context.Executor, request, result);
-                    CommandSystem.GetOutcomeWriter<CommandExecutor>().Write(context.Executor, result.Outcome ?? CommandOutcome.Empty);
-                }
-                else if (Commands.RequiresLegacyDispatch(context.Executor, result.ExecutionRequest?.InvokedRoot)) {
-                    Commands.HandleCommand(context.Executor, result.ExecutionRequest?.RawInput ?? nestedCommand);
-                }
-                else {
-                    CommandSystem.GetOutcomeWriter<CommandExecutor>().Write(
-                        context.Executor,
-                        CommandOutcome.Error(GetString("Invalid command entered. Type {0}help for a list of valid commands.", Commands.Specifier)));
-                }
+                Commands.Dispatch(context.Executor, nestedCommand);
             }
             finally {
                 tsPlayer.tempGroup = null;

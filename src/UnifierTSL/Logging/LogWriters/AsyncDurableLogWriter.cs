@@ -16,6 +16,7 @@ namespace UnifierTSL.Logging.LogWriters
         private readonly Task consumerTask;
         private readonly Lock disposeGate = new();
         private readonly Lock sinkGate = new();
+        private readonly List<QueuedDurableLogRecord> batch = new(BatchSize);
 
         private long enqueuedCount;
         private long dequeuedCount;
@@ -92,25 +93,28 @@ namespace UnifierTSL.Logging.LogWriters
             }
         }
 
-        private void DrainPendingRecords(List<QueuedDurableLogRecord> batch) {
+        private bool DrainPendingRecords() {
+            bool wroteAny = false;
             while (queue.Reader.TryRead(out QueuedDurableLogRecord record)) {
                 batch.Add(record);
                 Interlocked.Increment(ref dequeuedCount);
                 if (batch.Count >= BatchSize) {
-                    FlushBatch(batch);
+                    wroteAny |= FlushBatch();
                 }
             }
+
+            return wroteAny;
         }
 
-        private void FlushBatch(List<QueuedDurableLogRecord> batch) {
+        private bool FlushBatch() {
             if (batch.Count <= 0) {
-                return;
+                return false;
             }
 
             try {
                 if (Volatile.Read(ref sinkFailed) == 0) {
                     sink.WriteBatch(CollectionsMarshal.AsSpan(batch));
-                    sink.Flush();
+                    return true;
                 }
             }
             catch (Exception ex) {
@@ -119,6 +123,8 @@ namespace UnifierTSL.Logging.LogWriters
             finally {
                 ReturnBatchResources(batch);
             }
+
+            return false;
         }
 
         private void FlushSink() {
@@ -169,11 +175,12 @@ namespace UnifierTSL.Logging.LogWriters
                 if (sinkDisposed) {
                     return;
                 }
-                List<QueuedDurableLogRecord> batch = new(BatchSize);
                 try {
-                    DrainPendingRecords(batch);
-                    FlushBatch(batch);
-                    FlushSink();
+                    bool wroteAny = DrainPendingRecords();
+                    wroteAny |= FlushBatch();
+                    if (wroteAny) {
+                        FlushSink();
+                    }
                 }
                 finally {
                     ReturnBatchResources(batch);

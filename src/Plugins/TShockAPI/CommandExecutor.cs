@@ -86,16 +86,11 @@ namespace TShockAPI
                 return;
             }
 
-            if (SourceServer is null) {
+            if (HasServerPrivileges) {
                 CurrentLogger.Info(message, file: file, member: member, line: line);
             }
             else {
-                if (UserId == byte.MaxValue) {
-                    CurrentLogger.Info(message, file: file, member: member, line: line);
-                }
-                else {
-                    TShock.Players[UserId].SendMessage(message, color);
-                }
+                TShock.Players[UserId].SendMessage(message, color);
             }
         }
         public void SendMessage(string message, byte r, byte g, byte b,
@@ -103,22 +98,7 @@ namespace TShockAPI
             [CallerMemberName] string? member = null,
             [CallerLineNumber] int line = 0) {
 
-            if (RestPlayer is not null) {
-                RestPlayer.SendMessage(message, new Color(r, g, b));
-                return;
-            }
-
-            if (SourceServer is null) {
-                CurrentLogger.Info(message, file: file, member: member, line: line);
-            }
-            else {
-                if (UserId == byte.MaxValue) {
-                    CurrentLogger.Info(message, file: file, member: member, line: line);
-                }
-                else {
-                    TShock.Players[UserId].SendMessage(message, new Color(r, g, b));
-                }
-            }
+            SendMessage(message, new Color(r, g, b), file: file, member: member, line: line);
         }
         public void SendErrorMessage(string message,
             [CallerFilePath] string? file = null,
@@ -130,16 +110,11 @@ namespace TShockAPI
                 return;
             }
 
-            if (SourceServer is null) {
+            if (HasServerPrivileges) {
                 CurrentLogger.Error(message, file: file, member: member, line: line);
             }
             else {
-                if (UserId == byte.MaxValue) {
-                    CurrentLogger.Error(message, file: file, member: member, line: line);
-                }
-                else {
-                    TShock.Players[UserId].SendErrorMessage(message);
-                }
+                TShock.Players[UserId].SendErrorMessage(message);
             }
         }
         public void SendInfoMessage(string message,
@@ -152,16 +127,11 @@ namespace TShockAPI
                 return;
             }
 
-            if (SourceServer is null) {
+            if (HasServerPrivileges) {
                 CurrentLogger.Info(message, file: file, member: member, line: line);
             }
             else {
-                if (UserId == byte.MaxValue) {
-                    CurrentLogger.Info(message, file: file, member: member, line: line);
-                }
-                else {
-                    TShock.Players[UserId].SendInfoMessage(message);
-                }
+                TShock.Players[UserId].SendInfoMessage(message);
             }
         }
         public void SendWarningMessage(string message,
@@ -174,16 +144,11 @@ namespace TShockAPI
                 return;
             }
 
-            if (SourceServer is null) {
+            if (HasServerPrivileges) {
                 CurrentLogger.Warning(message, file: file, member: member, line: line);
             }
             else {
-                if (UserId == byte.MaxValue) {
-                    CurrentLogger.Warning(message, file: file, member: member, line: line);
-                }
-                else {
-                    TShock.Players[UserId].SendWarningMessage(message);
-                }
+                TShock.Players[UserId].SendWarningMessage(message);
             }
         }
         public void SendSuccessMessage(string message,
@@ -196,16 +161,11 @@ namespace TShockAPI
                 return;
             }
 
-            if (SourceServer is null) {
+            if (HasServerPrivileges) {
                 CurrentLogger.Success(message, file: file, member: member, line: line);
             }
             else {
-                if (UserId == byte.MaxValue) {
-                    CurrentLogger.Success(message, file: file, member: member, line: line);
-                }
-                else {
-                    TShock.Players[UserId].SendSuccessMessage(message);
-                }
+                TShock.Players[UserId].SendSuccessMessage(message);
             }
         }
         public void LogError(string message,

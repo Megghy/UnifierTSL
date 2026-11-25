@@ -733,13 +733,14 @@ namespace TShockAPI
         /// </summary>
         public readonly List<ProjectileStruct> RecentlyCreatedProjectiles = [];
 
-        internal bool TryBeginRegionQuery(int tileX, int tileY, int generation)
+        internal bool TryBeginRegionQuery(int tileX, int tileY, int generation, int worldId = 0)
         {
-            if (_regionQueryTileX == tileX && _regionQueryTileY == tileY && _regionQueryGeneration == generation)
+            if (_regionQueryTileX == tileX && _regionQueryTileY == tileY && _regionQueryGeneration == generation && _regionQueryWorldId == worldId)
                 return false;
             _regionQueryTileX = tileX;
             _regionQueryTileY = tileY;
             _regionQueryGeneration = generation;
+            _regionQueryWorldId = worldId;
             return true;
         }
 
@@ -799,6 +800,7 @@ namespace TShockAPI
         int _regionQueryTileX = int.MinValue;
         int _regionQueryTileY = int.MinValue;
         int _regionQueryGeneration = int.MinValue;
+        int _regionQueryWorldId = int.MinValue;
 
         /// <summary>
         /// Contains data stored by plugins
@@ -1472,10 +1474,14 @@ namespace TShockAPI
         /// <returns>True or false, depending if the item passed the check or not.</returns>
         public bool GiveItemCheck(int type, string? name, int stack, int prefix = 0) {
             name ??= Localization.EnglishLanguage.GetItemNameById(type) ?? Lang.GetItemNameValue(type);
-            var isBanned = TShock.ItemBans.DataModel.ItemIsBanned(type, this) || (name is not null && TShock.ItemBans.DataModel.ItemIsBanned(name));
-            if (isBanned && GetCurrentSettings().PreventBannedItemSpawn &&
-                (TShock.ItemBans.DataModel.ItemIsBanned(type, this) || (name is not null && TShock.ItemBans.DataModel.ItemIsBanned(name, this)) || !GetCurrentSettings().AllowAllowedGroupsToSpawnBannedItems))
-                return false;
+            var itemBans = TShock.ItemBans.DataModel;
+            bool bannedForPlayer = itemBans.ItemIsBanned(type, this) || (name is not null && itemBans.ItemIsBanned(name, this));
+            bool isBanned = bannedForPlayer || (name is not null && itemBans.ItemIsBanned(name));
+            if (isBanned) {
+                var settings = GetCurrentSettings();
+                if (settings.PreventBannedItemSpawn && (bannedForPlayer || !settings.AllowAllowedGroupsToSpawnBannedItems))
+                    return false;
+            }
 
             GiveItem(type, stack, prefix);
             return true;

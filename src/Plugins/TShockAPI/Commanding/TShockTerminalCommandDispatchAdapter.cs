@@ -45,11 +45,12 @@ namespace TShockAPI.Commanding
             CancellationToken cancellationToken) {
             var executor = new CommandExecutor(sender.SourceServer, byte.MaxValue);
             var silent = TSCommandBridge.IsSilentInvocation(rawInput);
-            var request = TSCommandBridge.CreateDispatchRequest(
-                executor,
-                TerminalCommandEndpoint.EndpointId,
-                rawInput,
-                silent);
+            var request = CommandDispatchCoordinator.PrepareRequest(
+                TSCommandBridge.CreateDispatchRequest(
+                    executor,
+                    TerminalCommandEndpoint.EndpointId,
+                    rawInput,
+                    silent));
 
             if (CommandDispatchCoordinator.TryCreateExecutionRequest(request, out var execReq)
                 && Commands.RequiresLegacyDispatch(executor, execReq.InvokedRoot)) {
@@ -65,7 +66,7 @@ namespace TShockAPI.Commanding
             var dispatchCancellationToken = activityScope.Activity is null
                 ? cancellationToken
                 : activityScope.CancellationToken;
-            var result = await CommandDispatchCoordinator.DispatchAsync(request, dispatchCancellationToken).ConfigureAwait(false);
+            var result = await CommandDispatchCoordinator.DispatchPreparedAsync(request, dispatchCancellationToken).ConfigureAwait(false);
             return TSCommandBridge.CompleteTerminalDispatch(executor, request, result);
         }
 

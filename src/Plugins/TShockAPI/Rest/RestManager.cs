@@ -322,10 +322,14 @@ namespace TShockAPI
             var serverName = args.Parameters["server"];
             ServerContext? targetServer = null;
             if (!string.IsNullOrWhiteSpace(serverName)) {
-                targetServer = UnifiedServerCoordinator.Servers.FirstOrDefault(s => s.IsRunning && string.Equals(s.Name, serverName, StringComparison.OrdinalIgnoreCase))
-                    ?? UnifiedServerCoordinator.Servers.FirstOrDefault(s => string.Equals(s.Name, serverName, StringComparison.OrdinalIgnoreCase));
+                targetServer = UnifiedServerCoordinator.Servers.FirstOrDefault(s => s.IsRunning && string.Equals(s.Name, serverName, StringComparison.OrdinalIgnoreCase));
+                if (targetServer is null) {
+                    return RestResponse($"Server {serverName} was not found.");
+                }
             }
-            targetServer ??= UnifiedServerCoordinator.GetDefaultServer();
+            else {
+                targetServer = UnifiedServerCoordinator.GetDefaultServer();
+            }
 
             var tr = new TSRestPlayer(args.TokenData.Username, restPlayerGroup, targetServer);
             CommandExecutor executor = CommandExecutor.ForRest(tr, targetServer);
@@ -534,9 +538,11 @@ namespace TShockAPI
             int limit = GetInt(args.Parameters["limit"], 50);
             if (limit <= 0) limit = 50;
             if (limit > 500) limit = 500;
-            int offset = (page - 1) * limit;
+            long offset64 = (long)(page - 1) * limit;
 
-            var accounts = TShock.UserAccounts.GetUserAccounts(offset, limit);
+            var accounts = offset64 > int.MaxValue
+                ? []
+                : TShock.UserAccounts.GetUserAccounts((int)offset64, limit);
             return new RestObject() {
                 { "page", page },
                 { "limit", limit },

@@ -17,7 +17,6 @@ namespace TShockAPI
         public readonly CommandExecutor Executor;
         public ServerContext? Server => Executor.SourceServer;
         public string Message { get; private set; }
-        [MemberNotNull(nameof(Server))]
         public TSPlayer? Player { get; private set; }
         public TSPlayer ExecutorActor { get; private set; }
         public bool Silent { get; private set; }
